@@ -1,0 +1,146 @@
+{
+  "name": "mcu-serial-bridge",
+  "displayName": "MCU Serial Bridge",
+  "description": "A VS Code MCU serial bridge for human and agent-readable STM32 debug sessions.",
+  "version": "0.0.1",
+  "publisher": "local",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "commonjs",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:mcuSerialBridge.openPanel",
+    "onCommand:mcuSerialBridge.listPorts",
+    "onCommand:mcuSerialBridge.openSerial",
+    "onCommand:mcuSerialBridge.closeSerial",
+    "onCommand:mcuSerialBridge.sendLine",
+    "onCommand:mcuSerialBridge.build",
+    "onCommand:mcuSerialBridge.flash",
+    "onCommand:mcuSerialBridge.buildFlashOpenSerial",
+    "onCommand:mcuSerialBridge.startBridge",
+    "onCommand:mcuSerialBridge.stopBridge",
+    "onCommand:mcuSerialBridge.openSessionFolder"
+  ],
+  "main": "./out/src/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "mcuSerialBridge.openPanel",
+        "title": "MCU Serial Bridge: Open Panel"
+      },
+      {
+        "command": "mcuSerialBridge.listPorts",
+        "title": "MCU Serial Bridge: List Ports"
+      },
+      {
+        "command": "mcuSerialBridge.openSerial",
+        "title": "MCU Serial Bridge: Open Serial Port"
+      },
+      {
+        "command": "mcuSerialBridge.closeSerial",
+        "title": "MCU Serial Bridge: Close Serial Port"
+      },
+      {
+        "command": "mcuSerialBridge.sendLine",
+        "title": "MCU Serial Bridge: Send Line"
+      },
+      {
+        "command": "mcuSerialBridge.build",
+        "title": "MCU Serial Bridge: Build"
+      },
+      {
+        "command": "mcuSerialBridge.flash",
+        "title": "MCU Serial Bridge: Flash"
+      },
+      {
+        "command": "mcuSerialBridge.buildFlashOpenSerial",
+        "title": "MCU Serial Bridge: Build, Flash, and Open Serial"
+      },
+      {
+        "command": "mcuSerialBridge.startBridge",
+        "title": "MCU Serial Bridge: Start Bridge"
+      },
+      {
+        "command": "mcuSerialBridge.stopBridge",
+        "title": "MCU Serial Bridge: Stop Bridge"
+      },
+      {
+        "command": "mcuSerialBridge.openSessionFolder",
+        "title": "MCU Serial Bridge: Open Session Folder"
+      }
+    ],
+    "configuration": {
+      "title": "MCU Serial Bridge",
+      "properties": {
+        "mcuSerialBridge.configFile": {
+          "type": "string",
+          "default": ".vscode/mcu-serial-bridge.yaml",
+          "description": "Project-local bridge configuration file path, relative to the workspace root."
+        },
+        "mcuSerialBridge.bridge.host": {
+          "type": "string",
+          "default": "127.0.0.1",
+          "description": "Local HTTP and WebSocket bind host. MVP1 only supports local loopback hosts."
+        },
+        "mcuSerialBridge.bridge.port": {
+          "type": "number",
+          "default": 8765,
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "Local HTTP and WebSocket port."
+        },
+        "mcuSerialBridge.serial.defaultBaudrate": {
+          "type": "number",
+          "default": 115200,
+          "minimum": 1,
+          "description": "Default serial baud rate used when project configuration does not specify one."
+        },
+        "mcuSerialBridge.serial.defaultLineEnding": {
+          "type": "string",
+          "default": "\r\n",
+          "enum": [
+            "",
+            "\n",
+            "\r",
+            "\r\n"
+          ],
+          "description": "Default line ending appended by the Send Line command."
+        },
+        "mcuSerialBridge.logging.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable per-session local logs."
+        },
+        "mcuSerialBridge.logging.directory": {
+          "type": "string",
+          "default": ".serial-sessions",
+          "description": "Log directory, relative to the workspace root unless absolute."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "serialport": "^12.0.0",
+    "ws": "^8.17.1",
+    "yaml": "^2.4.5",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "@types/vscode": "^1.90.0",
+    "@types/ws": "^8.5.10",
+    "typescript": "^5.5.3",
+    "vitest": "^1.6.0"
+  }
+}
