@@ -1,0 +1,9 @@
+{
+  "name": "serial-llm-plugin",
+  "private": true,
+  "license": "UNLICENSED",
+  "scripts": {
+    "compile": "npm --prefix vscode-extension run compile",
+    "test": "npm --prefix vscode-extension test"
+  }
+}
