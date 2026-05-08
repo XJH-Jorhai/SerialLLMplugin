@@ -14,6 +14,7 @@ export function registerCommands(
 
   register(context, "mcuSerialBridge.startBridge", async () => {
     const session = await bridge.start();
+    BridgePanel.refreshCurrent();
     void vscode.window.showInformationMessage(
       `MCU Serial Bridge listening on ${session.api.host}:${session.api.port}.`
     );
@@ -21,6 +22,7 @@ export function registerCommands(
 
   register(context, "mcuSerialBridge.stopBridge", async () => {
     await bridge.stop();
+    BridgePanel.refreshCurrent();
     void vscode.window.showInformationMessage("MCU Serial Bridge stopped.");
   });
 
@@ -30,10 +32,23 @@ export function registerCommands(
       void vscode.window.showInformationMessage("No serial ports detected.");
       return;
     }
-    const summary = ports
-      .map((port) => `${port.path}${port.manufacturer ? ` (${port.manufacturer})` : ""}`)
-      .join(", ");
-    void vscode.window.showInformationMessage(`Serial ports: ${summary}`);
+    await vscode.window.showQuickPick(
+      ports.map((port) => ({
+        label: port.path,
+        description: port.manufacturer ?? port.friendlyName,
+        detail: [
+          port.serialNumber ? `Serial: ${port.serialNumber}` : undefined,
+          port.vendorId ? `VID: ${port.vendorId}` : undefined,
+          port.productId ? `PID: ${port.productId}` : undefined
+        ]
+          .filter(Boolean)
+          .join("  ")
+      })),
+      {
+        title: "MCU Serial Bridge: Detected Serial Ports",
+        placeHolder: "Select is informational only; use Open Serial Port to connect."
+      }
+    );
   });
 
   register(context, "mcuSerialBridge.openSerial", async () => {
@@ -41,16 +56,21 @@ export function registerCommands(
     if (!selected) {
       return;
     }
+    const baudrate = await askForBaudrate(getDefaultBaudrate(bridge));
+    if (baudrate === undefined) {
+      return;
+    }
     await bridge.openSerial({
       path: selected,
-      baudrate: vscode.workspace
-        .getConfiguration("mcuSerialBridge")
-        .get<number>("serial.defaultBaudrate", DEFAULT_BAUDRATE)
+      baudrate
     });
+    BridgePanel.refreshCurrent();
+    void vscode.window.showInformationMessage(`Serial port opened: ${selected} @ ${baudrate}.`);
   });
 
   register(context, "mcuSerialBridge.closeSerial", async () => {
     await bridge.closeSerial();
+    BridgePanel.refreshCurrent();
     void vscode.window.showInformationMessage("Serial port closed.");
   });
 
@@ -67,6 +87,7 @@ export function registerCommands(
       .getConfiguration("mcuSerialBridge")
       .get<string>("serial.defaultLineEnding", DEFAULT_LINE_ENDING);
     await bridge.sendText(`${value}${lineEnding}`);
+    BridgePanel.refreshCurrent();
   });
 
   register(context, "mcuSerialBridge.build", () => {
@@ -96,7 +117,7 @@ export function registerCommands(
       void vscode.window.showInformationMessage("No bridge session folder is active.");
       return;
     }
-    await vscode.env.openExternal(vscode.Uri.file(directory));
+    await vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(directory));
   });
 }
 
@@ -125,7 +146,8 @@ async function pickSerialPort(bridge: BridgeService): Promise<string | undefined
   const ports = await bridge.listPorts();
   const items = ports.map((port) => ({
     label: port.path,
-    description: port.manufacturer
+    description: port.manufacturer ?? port.friendlyName,
+    detail: port.serialNumber ? `Serial: ${port.serialNumber}` : undefined
   }));
   const picked = await vscode.window.showQuickPick(items, {
     title: "MCU Serial Bridge: Open Serial Port",
@@ -139,4 +161,33 @@ async function pickSerialPort(bridge: BridgeService): Promise<string | undefined
     prompt: "Enter a serial port path manually if it was not detected.",
     ignoreFocusOut: true
   });
+}
+
+async function askForBaudrate(defaultBaudrate: number): Promise<number | undefined> {
+  const value = await vscode.window.showInputBox({
+    title: "MCU Serial Bridge: Baudrate",
+    prompt: "Enter the serial baudrate.",
+    value: String(defaultBaudrate),
+    validateInput(input) {
+      const parsed = Number(input.trim());
+      if (!Number.isInteger(parsed) || parsed <= 0) {
+        return "Baudrate must be a positive integer.";
+      }
+      return undefined;
+    },
+    ignoreFocusOut: true
+  });
+  if (value === undefined) {
+    return undefined;
+  }
+  return Number(value.trim());
+}
+
+function getDefaultBaudrate(bridge: BridgeService): number {
+  return (
+    bridge.getSession().serial.baudrate ??
+    vscode.workspace
+      .getConfiguration("mcuSerialBridge")
+      .get<number>("serial.defaultBaudrate", DEFAULT_BAUDRATE)
+  );
 }
