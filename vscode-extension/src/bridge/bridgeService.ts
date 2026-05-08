@@ -3,6 +3,8 @@ import { BridgeApiProvider } from "../api/types";
 import { WebSocketHub } from "../api/websocketHub";
 import { BridgeConfig, bridgeConfigSchema } from "../config/schema";
 import { SessionLogger } from "../logging/sessionLogger";
+import { createProtocolParser } from "../protocol/parser";
+import { ParserOutput, ProtocolParser } from "../protocol/types";
 import { BridgeError } from "../util/errors";
 import { isoNow, nowEpochSeconds } from "../util/time";
 import { RingBuffer } from "./ringBuffer";
@@ -40,6 +42,7 @@ export class BridgeService implements BridgeApiProvider {
   private readonly events: RingBuffer<BridgeEvent>;
   private readonly commands: RingBuffer<CommandEntry>;
   private config: BridgeConfig = bridgeConfigSchema.parse({});
+  private parser: ProtocolParser = createProtocolParser(this.config.protocol.type);
   private startedAt: string | undefined;
   private running = false;
 
@@ -65,16 +68,12 @@ export class BridgeService implements BridgeApiProvider {
 
     this.config = await this.configProvider();
     this.ensureLocalHost(this.config.bridge.host);
+    this.parser = createProtocolParser(this.config.protocol.type);
     this.startedAt = isoNow();
 
     try {
       if (this.config.logging.enabled) {
-        await this.sessionLogger.start({
-          workspaceRoot: this.config.workspaceRoot ?? process.cwd(),
-          directory: this.config.logging.directory,
-          projectName: this.config.project.name,
-          session: this.buildSession(true)
-        });
+        await this.sessionLogger.startSession(this.buildSession(true));
       }
 
       await this.httpServer.start(this.config.bridge.host, this.config.bridge.port);
@@ -99,7 +98,7 @@ export class BridgeService implements BridgeApiProvider {
     await this.closeSerial();
     await this.webSocketHub.stop();
     await this.httpServer.stop();
-    await this.sessionLogger.stop();
+    await this.sessionLogger.close();
     this.running = false;
     this.startedAt = undefined;
   }
@@ -157,7 +156,7 @@ export class BridgeService implements BridgeApiProvider {
       encoding: "text",
       data
     };
-    this.commands.append(command);
+    this.commands.push(command);
     this.sessionLogger.logCommand(command);
     this.webSocketHub.broadcast({ type: "cmd_tx", ts: command.ts, data: command.data });
     return command;
@@ -166,29 +165,29 @@ export class BridgeService implements BridgeApiProvider {
   public getLatest(seconds?: number): LatestData {
     const windowSeconds = seconds ?? this.config.bridge.latestWindowSeconds;
     const cutoff = nowEpochSeconds() - windowSeconds;
-    const rawLines = this.rawLines.latestWhere((entry) => entry.ts >= cutoff);
-    const parsed = this.parsed.latestWhere((entry) => entry.ts >= cutoff);
+    const rawLines = this.rawLines.latestSince(cutoff);
+    const parsed = this.parsed.latestSince(cutoff);
     return {
       windowSeconds,
       rawLines,
       parsed,
       samples: parsed.filter((entry): entry is SampleFrame => entry.type === "sample"),
-      events: this.events.latestWhere((entry) => entry.ts >= cutoff),
-      commands: this.commands.latestWhere((entry) => entry.ts >= cutoff)
+      events: this.events.latestSince(cutoff),
+      commands: this.commands.latestSince(cutoff)
     };
   }
 
   public recordRawLine(line: RawLineEntry): void {
     // Raw data is recorded before protocol parsing by design.
-    this.rawLines.append(line);
-    this.sessionLogger.logRaw(line);
+    this.rawLines.push(line);
+    this.sessionLogger.logRawLine(line);
     this.webSocketHub.broadcast({ type: "raw", ts: line.ts, data: line.data });
 
-    // TODO(mvp1-parser): Parse raw text/json-line frames and log recoverable parser events.
+    this.recordParserOutputs(this.parser.pushText(`${line.data}\n`, line.ts));
   }
 
   public recordParsed(frame: ParsedFrame): void {
-    this.parsed.append(frame);
+    this.parsed.push(frame);
     this.sessionLogger.logParsed(frame);
     this.webSocketHub.broadcast(frame);
   }
@@ -198,13 +197,16 @@ export class BridgeService implements BridgeApiProvider {
     message: string,
     code?: string
   ): void {
-    const event: BridgeEvent = {
+    this.recordEventEntry({
       ts: nowEpochSeconds(),
       level,
       message,
       code
-    };
-    this.events.append(event);
+    });
+  }
+
+  private recordEventEntry(event: BridgeEvent): void {
+    this.events.push(event);
     this.sessionLogger.logEvent(event);
     this.webSocketHub.broadcast({
       type: "event",
@@ -248,9 +250,28 @@ export class BridgeService implements BridgeApiProvider {
       // Startup cleanup should not mask the original startup failure.
     }
     try {
-      await this.sessionLogger.stop();
+      await this.sessionLogger.close();
     } catch {
       // Startup cleanup should not mask the original startup failure.
+    }
+  }
+
+  private recordParserOutputs(outputs: ParserOutput[]): void {
+    for (const output of outputs) {
+      switch (output.type) {
+        case "raw":
+        case "json":
+          this.recordParsed(output);
+          break;
+        case "event":
+          this.recordEventEntry({
+            ts: output.ts,
+            level: output.level,
+            message: output.message,
+            code: output.code
+          });
+          break;
+      }
     }
   }
 }
