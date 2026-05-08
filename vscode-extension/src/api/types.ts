@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DEFAULT_BAUDRATE } from "../config/defaults";
 import {
   BridgeSession,
   CommandEntry,
@@ -18,9 +19,21 @@ export interface BridgeApiProvider {
   getLatest(seconds?: number): LatestData;
 }
 
+const serialDataBitsSchema = z.union([
+  z.literal(5),
+  z.literal(6),
+  z.literal(7),
+  z.literal(8)
+]);
+const serialParitySchema = z.enum(["none", "even", "mark", "odd", "space"]);
+const serialStopBitsSchema = z.union([z.literal(1), z.literal(1.5), z.literal(2)]);
+
 export const serialOpenRequestSchema = z.object({
   path: z.string().min(1),
-  baudrate: z.number().int().positive()
+  baudrate: z.number().int().positive().default(DEFAULT_BAUDRATE),
+  dataBits: serialDataBitsSchema.optional(),
+  parity: serialParitySchema.optional(),
+  stopBits: serialStopBitsSchema.optional()
 });
 
 export const serialSendRequestSchema = z.object({

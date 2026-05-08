@@ -2,11 +2,20 @@ export type ParsedLineHandler<T> = (line: string, ts: number) => T[];
 
 export class LineBuffer<T> {
   private buffered = "";
+  private suppressLeadingLf = false;
 
   public constructor(private readonly parseLine: ParsedLineHandler<T>) {}
 
   public pushText(text: string, ts: number): T[] {
-    this.buffered += text;
+    let nextText = text;
+    if (this.suppressLeadingLf) {
+      this.suppressLeadingLf = false;
+      if (nextText.startsWith("\n")) {
+        nextText = nextText.slice(1);
+      }
+    }
+
+    this.buffered += nextText;
 
     const outputs: T[] = [];
     let lineStart = 0;
@@ -21,6 +30,8 @@ export class LineBuffer<T> {
 
       if (current === "\r" && this.buffered.charAt(index + 1) === "\n") {
         index += 1;
+      } else if (current === "\r" && index === this.buffered.length - 1) {
+        this.suppressLeadingLf = true;
       }
       lineStart = index + 1;
     }
@@ -36,6 +47,7 @@ export class LineBuffer<T> {
 
     const line = this.buffered;
     this.buffered = "";
+    this.suppressLeadingLf = false;
     return this.parseLine(line, ts);
   }
 }

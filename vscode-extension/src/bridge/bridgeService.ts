@@ -15,6 +15,7 @@ import {
   CommandEntry,
   LatestData,
   ParsedFrame,
+  RawDataEntry,
   RawLineEntry,
   SampleFrame,
   SerialOpenOptions,
@@ -37,6 +38,7 @@ export class BridgeService implements BridgeApiProvider {
   private readonly sessionLogger: SessionLogger;
   private readonly httpServer: HttpServer;
   private readonly webSocketHub: WebSocketHub;
+  private readonly rawData: RingBuffer<RawDataEntry>;
   private readonly rawLines: RingBuffer<RawLineEntry>;
   private readonly parsed: RingBuffer<ParsedFrame>;
   private readonly events: RingBuffer<BridgeEvent>;
@@ -55,10 +57,26 @@ export class BridgeService implements BridgeApiProvider {
     this.httpServer = options.httpServer ?? new HttpServer(this);
 
     const maxRecentItems = options.maxRecentItems ?? 1000;
+    this.rawData = new RingBuffer<RawDataEntry>(maxRecentItems);
     this.rawLines = new RingBuffer<RawLineEntry>(maxRecentItems);
     this.parsed = new RingBuffer<ParsedFrame>(maxRecentItems);
     this.events = new RingBuffer<BridgeEvent>(maxRecentItems);
     this.commands = new RingBuffer<CommandEntry>(maxRecentItems);
+
+    this.serialManager.onRawData((entry) => {
+      this.recordRawData({
+        ts: entry.ts,
+        data: entry.text,
+        bytes: entry.data.length,
+        port: entry.port
+      });
+    });
+    this.serialManager.onRawLine((line) => {
+      this.recordRawLineEntry({ ts: line.ts, data: line.data });
+    });
+    this.serialManager.onEvent((event) => {
+      this.recordEventEntry(event);
+    });
   }
 
   public async start(): Promise<BridgeSession> {
@@ -138,11 +156,13 @@ export class BridgeService implements BridgeApiProvider {
     if (!this.running) {
       await this.start();
     }
-    return this.serialManager.open(options);
+    await this.serialManager.open(options);
+    return this.serialManager.getState();
   }
 
   public async closeSerial(): Promise<SerialState> {
-    return this.serialManager.close();
+    await this.serialManager.close();
+    return this.serialManager.getState();
   }
 
   public async sendText(data: string): Promise<CommandEntry> {
@@ -165,10 +185,12 @@ export class BridgeService implements BridgeApiProvider {
   public getLatest(seconds?: number): LatestData {
     const windowSeconds = seconds ?? this.config.bridge.latestWindowSeconds;
     const cutoff = nowEpochSeconds() - windowSeconds;
+    const rawData = this.rawData.latestSince(cutoff);
     const rawLines = this.rawLines.latestSince(cutoff);
     const parsed = this.parsed.latestSince(cutoff);
     return {
       windowSeconds,
+      rawData,
       rawLines,
       parsed,
       samples: parsed.filter((entry): entry is SampleFrame => entry.type === "sample"),
@@ -177,9 +199,22 @@ export class BridgeService implements BridgeApiProvider {
     };
   }
 
+  public recordRawData(entry: RawDataEntry): void {
+    if (entry.data.length === 0 && entry.bytes === 0) {
+      return;
+    }
+
+    // Raw data is recorded before protocol parsing by design.
+    this.rawData.push(entry);
+    this.sessionLogger.logRawData(entry);
+    this.webSocketHub.broadcast({ type: "raw", ts: entry.ts, data: entry.data });
+
+    this.recordParserOutputs(this.parser.pushText(entry.data, entry.ts));
+  }
+
   public recordRawLine(line: RawLineEntry): void {
     // Raw data is recorded before protocol parsing by design.
-    this.rawLines.push(line);
+    this.recordRawLineEntry(line);
     this.sessionLogger.logRawLine(line);
     this.webSocketHub.broadcast({ type: "raw", ts: line.ts, data: line.data });
 
@@ -190,6 +225,10 @@ export class BridgeService implements BridgeApiProvider {
     this.parsed.push(frame);
     this.sessionLogger.logParsed(frame);
     this.webSocketHub.broadcast(frame);
+  }
+
+  private recordRawLineEntry(line: RawLineEntry): void {
+    this.rawLines.push(line);
   }
 
   public recordEvent(
