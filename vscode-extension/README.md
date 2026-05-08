@@ -1,46 +1,223 @@
 # MCU Serial Bridge VS Code Extension
 
-This directory contains the initial TypeScript-only VS Code extension scaffold for MVP1 of the MCU Serial Bridge project.
+MCU Serial Bridge is a VS Code extension for STM32-style MCU serial debugging. Its job is to own one serial session inside the VS Code workflow, show the same raw stream to a human, expose recent data through local agent-readable APIs, and write reproducible local session logs.
 
-The product boundary is intentionally narrow: the bridge is a VS Code extension that owns one serial session, exposes local agent-readable APIs, and writes reproducible session logs. It is not a standalone app, a VOFA+ clone, or a Serial Studio clone.
+It is not a standalone serial assistant, a VOFA+ clone, a Serial Studio clone, or a replacement for the existing CMake, pyOCD, or Cortex-Debug workflow.
 
 ## MVP1 Scope
 
-Implemented in this scaffold:
+MVP1 focuses on the serial bridge and logging path:
 
-- VS Code extension metadata, command contributions, and configuration schema.
-- Strict TypeScript project setup with Vitest.
-- Core service boundaries for commands, bridge lifecycle, serial ownership, local HTTP API, WebSocket fanout, session logging, protocol parsing, and Webview shell.
-- Safe command stubs for start, stop, list ports, open serial, close serial, send line, build, flash, build-flash-open-serial, and open session folder.
-- Bounded ring buffer utility for recent bridge data.
-- Session logger structure that uses file streams for long-running log files.
-- Minimal tests that do not require STM32 hardware or a serial device.
+- List detected serial ports.
+- Start and stop a local HTTP/WebSocket bridge on `127.0.0.1`.
+- Open one selected serial port with a configurable baudrate and 8N1 defaults.
+- Read raw serial chunks and completed raw lines.
+- Display raw output, latest parsed frames, and events in a minimal VS Code Webview.
+- Send text commands from VS Code or the local API.
+- Write per-session `session.json`, `raw.log`, `parsed.jsonl`, `events.jsonl`, and `commands.jsonl`.
+- Expose `GET /session`, `GET /ports`, `GET /latest`, `GET /logs`, `POST /serial/open`, `POST /serial/close`, `POST /serial/send`, and `WS /stream`.
+- Parse `raw-text` and `json-line` protocol output. Invalid JSON lines become recoverable warning events.
 
-Intentionally left for follow-up work:
+## Not Included In MVP1
 
-- Actual serial port open/read/write lifecycle in `src/bridge/serialManager.ts`.
-- Raw byte to line framing and parser dispatch in `src/bridge/bridgeService.ts`.
-- Full `/latest`, `/serial/send`, and WebSocket live-stream behavior backed by serial input.
-- Complete Webview terminal UI and command controls.
-- Build, flash, and debug task integration for later MVP stages.
+- Build, flash, and build-flash-open-serial task integration. The commands exist but currently report that task integration is not implemented.
+- Cortex-Debug, pyOCD, or probe lifecycle control.
+- VOFA FireWater, waveform plotting, channel controls, binary framing, or protocol designer UI.
+- External network binding. MVP1 rejects non-local HTTP/WebSocket hosts.
+- VOFA+ or Serial Studio integration. Neither tool is required.
+- Hardware-specific defaults such as a fixed COM port, STM32 family, UART instance, or ELF path.
 
-## Commands
+## Development Install
 
-- `mcuSerialBridge.openPanel` - MCU Serial Bridge: Open Panel
-- `mcuSerialBridge.listPorts` - MCU Serial Bridge: List Ports
-- `mcuSerialBridge.openSerial` - MCU Serial Bridge: Open Serial Port
-- `mcuSerialBridge.closeSerial` - MCU Serial Bridge: Close Serial Port
-- `mcuSerialBridge.sendLine` - MCU Serial Bridge: Send Line
-- `mcuSerialBridge.build` - MCU Serial Bridge: Build
-- `mcuSerialBridge.flash` - MCU Serial Bridge: Flash
-- `mcuSerialBridge.buildFlashOpenSerial` - MCU Serial Bridge: Build, Flash, and Open Serial
-- `mcuSerialBridge.startBridge` - MCU Serial Bridge: Start Bridge
-- `mcuSerialBridge.stopBridge` - MCU Serial Bridge: Stop Bridge
-- `mcuSerialBridge.openSessionFolder` - MCU Serial Bridge: Open Session Folder
+From this repository root:
+
+```powershell
+cd vscode-extension
+npm.cmd install
+```
+
+Or run the extension scripts from the repository root:
+
+```powershell
+npm.cmd --prefix vscode-extension install
+```
+
+## Compile And Tests
+
+From `vscode-extension`:
+
+```powershell
+npm.cmd run compile
+npm.cmd test
+```
+
+From the repository root:
+
+```powershell
+npm.cmd run compile
+npm.cmd test
+```
+
+The automated tests are no-hardware tests. They use fake serial ports, temporary log directories, and local HTTP/WebSocket test servers.
+
+## Launch In Extension Development Host
+
+1. Open `C:\Users\20101\Desktop\SerialLLMplugin\vscode-extension` in VS Code.
+2. Run `npm.cmd install` if dependencies are not installed yet.
+3. Run `npm.cmd run compile`.
+4. Press `F5`.
+5. If VS Code asks for an environment, choose the VS Code extension development option.
+6. In the Extension Development Host window, open the workspace you want to observe.
+
+Alternative CLI launch:
+
+```powershell
+code --extensionDevelopmentPath="C:\Users\20101\Desktop\SerialLLMplugin\vscode-extension"
+```
+
+## Start The Bridge
+
+Use either path:
+
+- Command Palette: `MCU Serial Bridge: Start Bridge`.
+- Command Palette: `MCU Serial Bridge: Open Panel`, then click `Start Bridge`.
+
+By default the bridge listens on:
+
+```text
+http://127.0.0.1:8765
+ws://127.0.0.1:8765/stream
+```
+
+Opening a serial port from the panel or command palette also starts the bridge if it is not already running.
+
+## List Ports
+
+Use one of:
+
+- Command Palette: `MCU Serial Bridge: List Ports`.
+- Panel: click `List Ports`.
+- API after the bridge is running:
+
+```powershell
+Invoke-RestMethod -Uri "http://127.0.0.1:8765/ports"
+```
+
+## Open Serial
+
+Use one of:
+
+- Command Palette: `MCU Serial Bridge: Open Serial Port`, select or enter a port, then enter a baudrate.
+- Panel: select a detected port or enter a manual port such as `COM8`, enter a baudrate, then click `Open`.
+- API after the bridge is running:
+
+```powershell
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://127.0.0.1:8765/serial/open" `
+  -ContentType "application/json" `
+  -Body (@{
+    path = "COM8"
+    baudrate = 115200
+    dataBits = 8
+    parity = "none"
+    stopBits = 1
+  } | ConvertTo-Json)
+```
+
+Close other serial monitors before opening the port. Windows serial ports are usually exclusive.
+
+## Send Command
+
+Use one of:
+
+- Command Palette: `MCU Serial Bridge: Send Line`. This appends the configured `mcuSerialBridge.serial.defaultLineEnding`, which defaults to `\r\n`.
+- Panel: type a command in the send box and click `Send`. This also appends the configured default line ending.
+- API after the bridge is running and the serial port is open:
+
+```powershell
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://127.0.0.1:8765/serial/send" `
+  -ContentType "application/json" `
+  -Body (@{
+    data = "status`r`n"
+    encoding = "text"
+  } | ConvertTo-Json)
+```
+
+The API sends the exact `data` string. Include `\r`, `\n`, or `\r\n` in the request when the firmware protocol requires a line ending.
+
+## Local API
+
+All MVP1 endpoints bind to `127.0.0.1` by default.
+
+### `GET /session`
+
+Returns bridge state, project metadata when configured, serial state, protocol, API address, and active log directory.
+
+```powershell
+Invoke-RestMethod -Uri "http://127.0.0.1:8765/session"
+```
+
+### `GET /ports`
+
+Returns detected serial ports.
+
+```powershell
+Invoke-RestMethod -Uri "http://127.0.0.1:8765/ports"
+```
+
+### `GET /latest`
+
+Returns recent raw chunks, raw lines, parsed frames, samples array, events, and commands. `samples` is present for API shape compatibility, but MVP1 parsers currently produce `raw` and `json` frames only.
+
+```powershell
+Invoke-RestMethod -Uri "http://127.0.0.1:8765/latest"
+Invoke-RestMethod -Uri "http://127.0.0.1:8765/latest?seconds=20"
+```
+
+### `POST /serial/send`
+
+Sends text to the open serial port and logs the command to `commands.jsonl`.
+
+```powershell
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://127.0.0.1:8765/serial/send" `
+  -ContentType "application/json" `
+  -Body (@{ data = "status`r`n"; encoding = "text" } | ConvertTo-Json)
+```
+
+### `WS /stream`
+
+Streams live messages such as `raw`, `parsed`, `event`, and `cmd_tx`.
+
+From `vscode-extension`, using the existing `ws` dependency:
+
+```powershell
+node -e "const WebSocket=require('ws'); const ws=new WebSocket('ws://127.0.0.1:8765/stream'); ws.on('open',()=>console.log('connected')); ws.on('message',m=>console.log(m.toString()));"
+```
+
+## Logs
+
+When logging is enabled, session logs are created under the configured logging directory. The default is `.serial-sessions` under the active workspace root:
+
+```text
+.serial-sessions/
+  YYYY-MM-DD_HHMMSS_<project>/
+    session.json
+    raw.log
+    parsed.jsonl
+    events.jsonl
+    commands.jsonl
+```
+
+Use `MCU Serial Bridge: Open Session Folder` or the panel `Open Log Folder` button to reveal the active session directory. If no session is active, there is no log folder to open.
 
 ## Settings
 
-Defaults:
+Default settings:
 
 ```json
 {
@@ -54,23 +231,4 @@ Defaults:
 }
 ```
 
-The bridge refuses non-local bind hosts in MVP1. External network binding requires an explicit future design.
-
-## Development
-
-```powershell
-npm install
-npm run compile
-npm test
-```
-
-No hardware is required for compile or the current tests.
-
-## Subagent Work Plan
-
-1. Serial IO: implement `SerialManager` with exclusive port ownership, byte stream handling, write queueing, and clean close behavior.
-2. Logging and parsing: wire raw bytes into line framing, log raw lines before parsing, dispatch `raw-text` and `json-line`, and convert parser failures into warning events.
-3. HTTP/WebSocket API: complete request validation and live stream coverage for `/session`, `/ports`, `/latest`, `/logs`, `/serial/open`, `/serial/close`, `/serial/send`, and `/stream`.
-4. Webview: replace the placeholder panel with status, port selector, open/close controls, raw terminal output, send line, latest parsed preview, log folder action, and event list.
-5. Tests: add parser, logger, bridge API, command registration, and lifecycle tests using simulated serial input rather than real hardware.
-6. STM32 workflow integration: later MVP stages should invoke existing VS Code tasks and debug configurations without rewriting `.vscode/tasks.json` or `.vscode/launch.json`.
+The project config loader also accepts `.vscode/mcu-serial-bridge.yaml` and the backward-compatible aliases `.vscode/stm32-serial-assistant.yaml` and `.vscode/stm32-serial-bridge.yaml` when the default config path is used.
