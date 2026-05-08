@@ -86,7 +86,20 @@ export class BridgeService implements BridgeApiProvider {
 
     this.config = await this.configProvider();
     this.ensureLocalHost(this.config.bridge.host);
-    this.parser = createProtocolParser(this.config.protocol.type);
+    const requestedProtocol = this.config.protocol.type;
+    this.parser = createProtocolParser(requestedProtocol);
+    const unsupportedProtocol =
+      this.parser.type === requestedProtocol ? undefined : requestedProtocol;
+    if (unsupportedProtocol) {
+      this.config = {
+        ...this.config,
+        protocol: {
+          ...this.config.protocol,
+          type: this.parser.type,
+          fallback: unsupportedProtocol
+        }
+      };
+    }
     this.startedAt = isoNow();
 
     try {
@@ -102,6 +115,13 @@ export class BridgeService implements BridgeApiProvider {
 
       this.running = true;
       this.recordEvent("info", "Bridge started.", "bridge.started");
+      if (unsupportedProtocol) {
+        this.recordEvent(
+          "warning",
+          `Protocol "${unsupportedProtocol}" is not implemented in MVP1; using ${this.parser.type}.`,
+          "protocol.unsupported"
+        );
+      }
       return this.getSession();
     } catch (error: unknown) {
       await this.cleanupFailedStart();
@@ -156,7 +176,7 @@ export class BridgeService implements BridgeApiProvider {
     if (!this.running) {
       await this.start();
     }
-    await this.serialManager.open(options);
+    await this.serialManager.open(this.withConfiguredSerialDefaults(options));
     return this.serialManager.getState();
   }
 
@@ -272,6 +292,16 @@ export class BridgeService implements BridgeApiProvider {
       ...state,
       port: state.port ?? this.config.serial.preferredPort ?? undefined,
       baudrate: state.baudrate ?? this.config.serial.defaultBaudrate
+    };
+  }
+
+  private withConfiguredSerialDefaults(options: SerialOpenOptions): SerialOpenOptions {
+    return {
+      path: options.path,
+      baudrate: options.baudrate ?? this.config.serial.defaultBaudrate,
+      dataBits: options.dataBits ?? this.config.serial.dataBits,
+      parity: options.parity ?? this.config.serial.parity,
+      stopBits: options.stopBits ?? this.config.serial.stopBits
     };
   }
 

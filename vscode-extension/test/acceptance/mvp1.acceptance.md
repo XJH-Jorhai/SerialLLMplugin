@@ -5,17 +5,17 @@ This checklist records how MVP1 acceptance is verified. It is intentionally spli
 ## Test Run Metadata
 
 ```text
-Date/time:
+Date/time: 2026-05-08 11:22
 Tester:
-Machine:
-Repository commit:
+Machine: local machine
+Repository commit: not recorded
 VS Code version:
 Node version:
 Extension host workspace:
-Serial test mode: no-hardware / mock / virtual COM pair / real STM32
-Serial port(s):
-Baudrate/frame:
-Hardware, if used:
+Serial test mode: USB-UART loopback
+Serial port(s): COM10
+Baudrate/frame: 115200, default 8N1
+Hardware, if used: USB-to-serial adapter with TX/RX shorted for loopback; no STM32 target connected
 ```
 
 ## Automated Evidence
@@ -59,11 +59,11 @@ Expected result:
 Evidence:
 
 ```text
-Status: not run / pass / fail
-Port:
-Input text:
-Observed panel text:
-Screenshot or notes:
+Status: pass
+Port: COM10
+Input text: loopback text sent through the panel/API
+Observed panel text: loopback response observed in panel raw output
+Screenshot or notes: Tested with USB-UART TX/RX loopback, not real STM32 firmware output.
 ```
 
 ### AC2: An agent can fetch latest serial output through HTTP
@@ -89,12 +89,12 @@ Expected result:
 Evidence:
 
 ```text
-Status: not run / pass / fail
-HTTP status:
-Observed rawData:
-Observed rawLines:
-Observed parsed frames:
-Notes:
+Status: pass
+HTTP status: pass through GET /latest?seconds=20
+Observed rawData: loopback serial data visible
+Observed rawLines: loopback serial lines visible
+Observed parsed frames: parsed.jsonl written
+Notes: Tested on COM10 at 115200 using USB-UART TX/RX loopback.
 ```
 
 ### AC3: Commands sent by humans or agents are logged
@@ -126,11 +126,11 @@ Expected result:
 Evidence:
 
 ```text
-Status: not run / pass / fail
-Panel command:
-API command:
-commands.jsonl entries:
-Notes:
+Status: pass
+Panel command: pass
+API command: pass through POST /serial/send
+commands.jsonl entries: commands.jsonl written
+Notes: Commands were verified through USB-UART loopback on COM10.
 ```
 
 ### AC4: Raw logs are saved per session
@@ -162,11 +162,11 @@ Expected result:
 Evidence:
 
 ```text
-Status: not run / pass / fail
-Session folder:
-raw.log excerpt:
+Status: pass
+Session folder: opened and inspected
+raw.log excerpt: raw.log written
 session.json notes:
-Missing files, if any:
+Missing files, if any: none observed; raw.log, parsed.jsonl, events.jsonl, and commands.jsonl were present/written
 ```
 
 ### AC5: The bridge does not require VOFA+ or Serial Studio
@@ -188,11 +188,11 @@ Expected result:
 Evidence:
 
 ```text
-Status: not run / pass / fail
+Status: pass
 Tools closed:
 package.json reviewed:
-Manual serial check mode:
-Notes:
+Manual serial check mode: USB-UART loopback
+Notes: Test used only the extension local panel/API path; no STM32 board, VOFA+, or Serial Studio was used.
 ```
 
 ## Final MVP1 Sign-Off
@@ -200,15 +200,15 @@ Notes:
 Use this summary only after filling the criteria above.
 
 ```text
-AC1 human VS Code output: not run / pass / fail
-AC2 HTTP latest output: not run / pass / fail
-AC3 command logging: not run / pass / fail
-AC4 raw per-session logs: not run / pass / fail
-AC5 no VOFA+/Serial Studio required: not run / pass / fail
+AC1 human VS Code output: pass
+AC2 HTTP latest output: pass
+AC3 command logging: pass
+AC4 raw per-session logs: pass
+AC5 no VOFA+/Serial Studio required: pass
 
-Accepted for MVP1: yes / no
-Remaining blockers:
-Residual risks:
+Accepted for MVP1: yes, for USB-UART loopback coverage only
+Remaining blockers: Real STM32 manual tests have not been run.
+Residual risks: STM32 UART wiring, firmware boot output, firmware command handling, flashing/reset behavior, and MCU-specific configuration remain unverified.
 ```
 
 ## Notes

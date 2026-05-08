@@ -205,7 +205,7 @@ export function renderBridgePanelHtml(): string {
       </label>
       <label>
         Manual port
-        <input id="manualPort" name="manualPort" placeholder="COM8 or /dev/ttyUSB0">
+        <input id="manualPort" name="manualPort" placeholder="COM port or /dev/ttyUSBx">
       </label>
       <label>
         Baudrate

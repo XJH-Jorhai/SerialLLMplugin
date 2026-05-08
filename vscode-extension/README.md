@@ -32,11 +32,11 @@ MVP1 focuses on the serial bridge and logging path:
 From this repository root:
 
 ```powershell
-cd vscode-extension
 npm.cmd install
 ```
 
-Or run the extension scripts from the repository root:
+The root install script installs the extension dependencies under `vscode-extension`.
+You can also install only the extension package directly:
 
 ```powershell
 npm.cmd --prefix vscode-extension install
@@ -108,7 +108,7 @@ Invoke-RestMethod -Uri "http://127.0.0.1:8765/ports"
 Use one of:
 
 - Command Palette: `MCU Serial Bridge: Open Serial Port`, select or enter a port, then enter a baudrate.
-- Panel: select a detected port or enter a manual port such as `COM8`, enter a baudrate, then click `Open`.
+- Panel: select a detected port or enter a manual port, enter a baudrate, then click `Open`.
 - API after the bridge is running:
 
 ```powershell
@@ -117,7 +117,7 @@ Invoke-RestMethod `
   -Uri "http://127.0.0.1:8765/serial/open" `
   -ContentType "application/json" `
   -Body (@{
-    path = "COM8"
+    path = "<serial-port>"
     baudrate = 115200
     dataBits = 8
     parity = "none"

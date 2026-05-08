@@ -16,7 +16,6 @@ export function createProtocolParser(type: string): LineParser {
     return createParser(type);
   }
 
-  // TODO(mvp1-parser): Surface unsupported parser selection as a bridge event.
   return createParser("raw-text");
 }
 

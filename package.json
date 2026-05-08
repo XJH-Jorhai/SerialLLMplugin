@@ -3,6 +3,7 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
+    "postinstall": "npm --prefix vscode-extension install",
     "compile": "npm --prefix vscode-extension run compile",
     "test": "npm --prefix vscode-extension test"
   }

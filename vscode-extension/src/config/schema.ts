@@ -12,6 +12,14 @@ import {
 } from "./defaults";
 
 export const lineEndingSchema = z.enum(["", "\n", "\r", "\r\n"]);
+const serialDataBitsSchema = z.union([
+  z.literal(5),
+  z.literal(6),
+  z.literal(7),
+  z.literal(8)
+]);
+const serialParitySchema = z.enum(["none", "even", "mark", "odd", "space"]);
+const serialStopBitsSchema = z.union([z.literal(1), z.literal(1.5), z.literal(2)]);
 
 export const bridgeConfigSchema = z.object({
   configFile: z.string().default(DEFAULT_CONFIG_FILE),
@@ -50,9 +58,9 @@ export const bridgeConfigSchema = z.object({
       preferredPort: z.string().nullable().optional(),
       defaultBaudrate: z.number().int().positive().default(DEFAULT_BAUDRATE),
       defaultLineEnding: lineEndingSchema.default(DEFAULT_LINE_ENDING),
-      dataBits: z.number().int().optional(),
-      parity: z.string().optional(),
-      stopBits: z.number().optional(),
+      dataBits: serialDataBitsSchema.optional(),
+      parity: serialParitySchema.optional(),
+      stopBits: serialStopBitsSchema.optional(),
       uart: z.string().optional(),
       tx: z.string().optional(),
       rx: z.string().optional()

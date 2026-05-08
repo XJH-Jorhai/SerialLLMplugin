@@ -176,6 +176,49 @@ Verify logs:
 4. Confirm `raw.log` contains injected lines.
 5. Confirm `commands.jsonl` contains API and panel commands sent during the session.
 
+## USB-UART Loopback Manual Test Evidence
+
+This section records a real USB-to-serial adapter loopback test. It verifies the extension's serial open/read/write/API/logging path with real Windows serial hardware, but it is not a real STM32 firmware test because no STM32 target was connected.
+
+Record:
+
+```text
+Date/time: 2026-05-08 11:22
+Machine: local machine
+Extension commit: not recorded
+Serial test mode: USB-UART adapter with TX/RX shorted for loopback
+USB-UART adapter: actual USB-to-serial tool, model not recorded
+COM port: COM10
+Baudrate/frame: 115200, default 8N1
+STM32 board: not used
+Firmware commit/build: not applicable
+How firmware was flashed: not applicable
+```
+
+Observed results:
+
+```text
+Open Panel: Pass
+Start Bridge: Pass
+List Ports: Pass
+Open COM port: Pass
+Panel raw output: Pass
+GET /latest: Pass
+Panel send command: Pass
+POST /serial/send: Pass
+raw.log written: Pass
+commands.jsonl written: Pass
+events.jsonl written: Pass
+parsed.jsonl written: Pass
+Close serial / Stop bridge: Pass
+```
+
+Coverage note:
+
+- This validates MVP1 end-to-end serial behavior through a real COM port and loopback.
+- This does not validate STM32 UART wiring, firmware boot output, firmware command handling, flashing, reset behavior, or MCU-specific configuration.
+- Real STM32 Manual Tests below remain not run until an STM32 target is connected and observed.
+
 ## Real STM32 Manual Tests
 
 These tests require real hardware and must not be reported as passed unless actually run.
