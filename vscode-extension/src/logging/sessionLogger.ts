@@ -5,6 +5,7 @@ import {
   BridgeEvent,
   CommandEntry,
   ParsedFrame,
+  RawDataEntry,
   RawLineEntry
 } from "../bridge/types";
 import { formatClockTime, nowEpochSeconds } from "../util/time";
@@ -128,6 +129,14 @@ export class SessionLogger {
 
   public logRaw(entry: RawLineEntry): void {
     this.logRawLine(entry);
+  }
+
+  public logRawData(entry: RawDataEntry): void {
+    const terminator =
+      entry.data.endsWith("\n") || entry.data.endsWith("\r") ? "" : "\n";
+    this.streams?.raw.write(
+      `[${formatClockTime(new Date(entry.ts * 1000))}] ${entry.data}${terminator}`
+    );
   }
 
   public logParsed(item: ParsedFrame): void {

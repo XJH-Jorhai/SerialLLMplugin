@@ -36,6 +36,17 @@ describe("RawTextParser", () => {
     ]);
   });
 
+  it("does not create an empty line when CRLF is split across chunks", () => {
+    const parser = new RawTextParser();
+
+    expect(parser.pushText("a\r", 10)).toEqual([
+      { ts: 10, type: "raw", text: "a" }
+    ]);
+    expect(parser.pushText("\nb\r\n", 11)).toEqual([
+      { ts: 11, type: "raw", text: "b" }
+    ]);
+  });
+
   it("flushes trailing partial data", () => {
     const parser = new RawTextParser();
 

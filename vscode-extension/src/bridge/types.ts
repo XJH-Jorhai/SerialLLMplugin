@@ -6,19 +6,45 @@ export interface SerialPortInfo {
   serialNumber?: string;
   vendorId?: string;
   productId?: string;
+  pnpId?: string;
+  locationId?: string;
   friendlyName?: string;
 }
 
+export type SerialDataBits = 5 | 6 | 7 | 8;
+export type SerialParity = "none" | "even" | "mark" | "odd" | "space";
+export type SerialStopBits = 1 | 1.5 | 2;
+
 export interface SerialOpenOptions {
   path: string;
-  baudrate: number;
+  baudrate?: number;
+  dataBits?: SerialDataBits;
+  parity?: SerialParity;
+  stopBits?: SerialStopBits;
 }
 
 export interface SerialState {
   open: boolean;
   port?: string;
   baudrate?: number;
+  dataBits?: SerialDataBits;
+  parity?: SerialParity;
+  stopBits?: SerialStopBits;
 }
+
+export interface SerialRawDataEvent {
+  ts: number;
+  port: string;
+  data: Buffer;
+  text: string;
+}
+
+export interface SerialRawLineEvent extends RawLineEntry {
+  port: string;
+}
+
+export type SerialEventHandler<T> = (event: T) => void;
+export type SerialUnsubscribe = () => void;
 
 export interface BridgeSession {
   running: boolean;
@@ -44,6 +70,13 @@ export interface BridgeSession {
 export interface RawLineEntry {
   ts: number;
   data: string;
+}
+
+export interface RawDataEntry {
+  ts: number;
+  data: string;
+  bytes: number;
+  port?: string;
 }
 
 export interface SampleFrame {
@@ -81,6 +114,7 @@ export interface CommandEntry {
 
 export interface LatestData {
   windowSeconds: number;
+  rawData: RawDataEntry[];
   rawLines: RawLineEntry[];
   parsed: ParsedFrame[];
   samples: SampleFrame[];
