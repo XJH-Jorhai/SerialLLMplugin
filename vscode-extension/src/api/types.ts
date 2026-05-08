@@ -19,6 +19,22 @@ export interface BridgeApiProvider {
   getLatest(seconds?: number): LatestData;
 }
 
+export interface ApiErrorBody {
+  code: string;
+  message: string;
+  details?: unknown;
+}
+
+export interface ApiErrorResponse {
+  ok: false;
+  error: ApiErrorBody;
+}
+
+export interface SerialSendResponse {
+  ok: true;
+  command: CommandEntry;
+}
+
 const serialDataBitsSchema = z.union([
   z.literal(5),
   z.literal(6),
@@ -43,6 +59,6 @@ export const serialSendRequestSchema = z.object({
 
 export type StreamMessage =
   | { type: "raw"; ts: number; data: string }
-  | ParsedFrame
+  | { type: "parsed"; ts: number; data: ParsedFrame }
   | { type: "event"; ts: number; level: string; message: string; code?: string }
   | { type: "cmd_tx"; ts: number; data: string };

@@ -1,10 +1,17 @@
 import { createServer, IncomingMessage, Server, ServerResponse } from "node:http";
 import { URL } from "node:url";
-import { asErrorMessage } from "../util/errors";
+import { ZodError } from "zod";
 import {
+  DEFAULT_BRIDGE_HOST,
+  DEFAULT_BRIDGE_PORT
+} from "../config/defaults";
+import { asErrorMessage, BridgeError } from "../util/errors";
+import {
+  ApiErrorResponse,
   BridgeApiProvider,
   serialOpenRequestSchema,
-  serialSendRequestSchema
+  serialSendRequestSchema,
+  SerialSendResponse
 } from "./types";
 
 export class HttpServer {
@@ -16,14 +23,19 @@ export class HttpServer {
     return this.server;
   }
 
-  public async start(host: string, port: number): Promise<void> {
+  public async start(
+    host = DEFAULT_BRIDGE_HOST,
+    port = DEFAULT_BRIDGE_PORT
+  ): Promise<void> {
     if (this.server) {
       return;
     }
 
+    this.ensureLocalHost(host);
+
     this.server = createServer((request, response) => {
       this.handle(request, response).catch((error: unknown) => {
-        this.respondJson(response, 500, { error: asErrorMessage(error) });
+        this.respondError(response, error);
       });
     });
 
@@ -82,8 +94,7 @@ export class HttpServer {
     }
 
     if (method === "GET" && url.pathname === "/latest") {
-      const secondsParam = url.searchParams.get("seconds");
-      const seconds = secondsParam ? Number(secondsParam) : undefined;
+      const seconds = this.parseLatestSeconds(url.searchParams.get("seconds"));
       this.respondJson(response, 200, this.provider.getLatest(seconds));
       return;
     }
@@ -108,11 +119,15 @@ export class HttpServer {
 
     if (method === "POST" && url.pathname === "/serial/send") {
       const body = serialSendRequestSchema.parse(await this.readJsonBody(request));
-      this.respondJson(response, 200, await this.provider.sendText(body.data));
+      const value: SerialSendResponse = {
+        ok: true,
+        command: await this.provider.sendText(body.data)
+      };
+      this.respondJson(response, 200, value);
       return;
     }
 
-    this.respondJson(response, 404, { error: "Not found." });
+    this.respondJson(response, 404, this.errorBody(404, "route.notFound", "Not found."));
   }
 
   private async readJsonBody(request: IncomingMessage): Promise<unknown> {
@@ -122,17 +137,128 @@ export class HttpServer {
       const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
       totalBytes += buffer.length;
       if (totalBytes > 64 * 1024) {
-        throw new Error("Request body is too large.");
+        throw new ApiRequestError(
+          413,
+          "request.bodyTooLarge",
+          "Request body is too large."
+        );
       }
       chunks.push(buffer);
     }
     const raw = Buffer.concat(chunks).toString("utf8");
-    return raw.length > 0 ? JSON.parse(raw) : {};
+    if (raw.length === 0) {
+      return {};
+    }
+
+    try {
+      return JSON.parse(raw);
+    } catch {
+      throw new ApiRequestError(
+        400,
+        "request.invalidJson",
+        "Request body must be valid JSON."
+      );
+    }
   }
 
   private respondJson(response: ServerResponse, statusCode: number, value: unknown): void {
+    if (response.headersSent) {
+      response.end();
+      return;
+    }
+
     response.statusCode = statusCode;
     response.setHeader("content-type", "application/json; charset=utf-8");
     response.end(JSON.stringify(value));
+  }
+
+  private respondError(response: ServerResponse, error: unknown): void {
+    if (error instanceof ApiRequestError) {
+      this.respondJson(
+        response,
+        error.statusCode,
+        this.errorBody(error.statusCode, error.code, error.message, error.details)
+      );
+      return;
+    }
+
+    if (error instanceof ZodError) {
+      this.respondJson(
+        response,
+        400,
+        this.errorBody(400, "request.validation", "Request body is invalid.", error.issues)
+      );
+      return;
+    }
+
+    if (error instanceof BridgeError) {
+      this.respondJson(
+        response,
+        400,
+        this.errorBody(400, error.code, error.message)
+      );
+      return;
+    }
+
+    this.respondJson(
+      response,
+      500,
+      this.errorBody(500, "bridge.internalError", asErrorMessage(error))
+    );
+  }
+
+  private errorBody(
+    _statusCode: number,
+    code: string,
+    message: string,
+    details?: unknown
+  ): ApiErrorResponse {
+    return {
+      ok: false,
+      error: {
+        code,
+        message,
+        ...(details === undefined ? {} : { details })
+      }
+    };
+  }
+
+  private parseLatestSeconds(value: string | null): number | undefined {
+    if (value === null || value.trim().length === 0) {
+      return undefined;
+    }
+
+    const seconds = Number(value);
+    if (!Number.isFinite(seconds) || seconds <= 0) {
+      throw new ApiRequestError(
+        400,
+        "request.invalidQuery",
+        "Query parameter seconds must be a positive number."
+      );
+    }
+
+    return seconds;
+  }
+
+  private ensureLocalHost(host: string): void {
+    const normalized = host.trim().toLowerCase();
+    if (normalized !== "127.0.0.1" && normalized !== "localhost" && normalized !== "::1") {
+      throw new BridgeError(
+        "MVP1 refuses non-local bridge hosts. Use 127.0.0.1 unless explicit external binding support is added.",
+        "bridge.host.nonLocal"
+      );
+    }
+  }
+}
+
+class ApiRequestError extends Error {
+  public constructor(
+    public readonly statusCode: number,
+    public readonly code: string,
+    message: string,
+    public readonly details?: unknown
+  ) {
+    super(message);
+    this.name = "ApiRequestError";
   }
 }

@@ -224,7 +224,7 @@ export class BridgeService implements BridgeApiProvider {
   public recordParsed(frame: ParsedFrame): void {
     this.parsed.push(frame);
     this.sessionLogger.logParsed(frame);
-    this.webSocketHub.broadcast(frame);
+    this.webSocketHub.broadcast({ type: "parsed", ts: frame.ts, data: frame });
   }
 
   private recordRawLineEntry(line: RawLineEntry): void {
