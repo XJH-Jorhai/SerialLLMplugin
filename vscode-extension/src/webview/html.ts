@@ -195,6 +195,9 @@ export function renderBridgePanelHtml(): string {
       flex: 1 1 auto;
       min-width: 80px;
     }
+    #toggleTimestamps {
+      min-width: 104px;
+    }
     pre,
     .events {
       flex: 1 1 0;
@@ -313,6 +316,7 @@ export function renderBridgePanelHtml(): string {
           <input id="sendValue" placeholder="Send command" title="Command text" aria-label="Command text">
           <button id="sendLine" title="Send command with configured line ending">Send</button>
           <button id="clearTerminal" class="secondary" title="Clear terminal view">Clear</button>
+          <button id="toggleTimestamps" class="secondary" title="Toggle terminal timestamps" aria-pressed="false">Timestamp Off</button>
         </div>
       </section>
 
@@ -340,7 +344,8 @@ export function renderBridgePanelHtml(): string {
       rawClearedAt: 0,
       rawEntries: [],
       rawSignatures: new Set(),
-      maxRawEntries: 2000
+      maxRawEntries: 2000,
+      showTimestamps: false
     };
 
     const el = {
@@ -359,6 +364,7 @@ export function renderBridgePanelHtml(): string {
       sendValue: document.getElementById("sendValue"),
       sendLine: document.getElementById("sendLine"),
       clearTerminal: document.getElementById("clearTerminal"),
+      toggleTimestamps: document.getElementById("toggleTimestamps"),
       parsedPreview: document.getElementById("parsedPreview"),
       events: document.getElementById("events"),
       message: document.getElementById("message")
@@ -404,6 +410,11 @@ export function renderBridgePanelHtml(): string {
       state.rawClearedAt = Date.now() / 1000;
       renderLatest();
     });
+    el.toggleTimestamps.addEventListener("click", () => {
+      state.showTimestamps = !state.showTimestamps;
+      renderTimestampToggle();
+      renderRaw();
+    });
     el.sendValue.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
         sendLine();
@@ -411,6 +422,7 @@ export function renderBridgePanelHtml(): string {
     });
 
     post({ type: "ready" });
+    renderTimestampToggle();
 
     function post(message) {
       vscode.postMessage(message);
@@ -546,14 +558,61 @@ export function renderBridgePanelHtml(): string {
         el.terminal.textContent = "";
         return;
       }
-      el.terminal.textContent = visible
-        .map((entry) => {
-          const text = String(entry.data || "");
-          const suffix = text.endsWith("\\n") ? "" : "\\n";
-          return "[" + formatTime(entry.ts) + "] " + text + suffix;
-        })
-        .join("");
+      el.terminal.textContent = state.showTimestamps
+        ? renderRawWithTimestamps(visible)
+        : visible.map((entry) => String(entry.data || "")).join("");
       el.terminal.scrollTop = el.terminal.scrollHeight;
+    }
+
+    function renderRawWithTimestamps(entries) {
+      let output = "";
+      let pending = "";
+      let pendingTs = undefined;
+
+      for (const entry of entries) {
+        const data = String(entry.data || "");
+        if (data.length === 0) {
+          continue;
+        }
+
+        const ts = Number.isFinite(entry.ts) ? entry.ts : pendingTs;
+        let lineTs = pending.length > 0 ? pendingTs : ts;
+        let line = pending;
+        pending = "";
+        pendingTs = undefined;
+
+        const parts = data.split(/(\\r\\n|\\n|\\r)/);
+        for (const part of parts) {
+          if (part === "") {
+            continue;
+          }
+          if (part === "\\r\\n" || part === "\\n" || part === "\\r") {
+            output += "[" + formatTime(lineTs) + "] " + line + part;
+            line = "";
+            lineTs = ts;
+            continue;
+          }
+          line += part;
+        }
+
+        if (line.length > 0) {
+          pending = line;
+          pendingTs = lineTs;
+        }
+      }
+
+      if (pending.length > 0) {
+        output += "[" + formatTime(pendingTs) + "] " + pending;
+      }
+
+      return output;
+    }
+
+    function renderTimestampToggle() {
+      el.toggleTimestamps.textContent = state.showTimestamps
+        ? "Timestamp On"
+        : "Timestamp Off";
+      el.toggleTimestamps.setAttribute("aria-pressed", state.showTimestamps ? "true" : "false");
     }
 
     function renderParsed(parsed) {

@@ -8,7 +8,7 @@ import {
   RawDataEntry,
   RawLineEntry
 } from "../bridge/types";
-import { formatClockTime, nowEpochSeconds } from "../util/time";
+import { nowEpochSeconds } from "../util/time";
 import {
   buildSessionDirectoryName,
   resolveSessionBaseDirectory,
@@ -122,9 +122,7 @@ export class SessionLogger {
       typeof lineOrEntry === "string"
         ? { ts, data: lineOrEntry }
         : lineOrEntry;
-    this.streams?.raw.write(
-      `[${formatClockTime(new Date(entry.ts * 1000))}] ${entry.data}\n`
-    );
+    this.streams?.raw.write(`${entry.data}\n`);
   }
 
   public logRaw(entry: RawLineEntry): void {
@@ -132,11 +130,7 @@ export class SessionLogger {
   }
 
   public logRawData(entry: RawDataEntry): void {
-    const terminator =
-      entry.data.endsWith("\n") || entry.data.endsWith("\r") ? "" : "\n";
-    this.streams?.raw.write(
-      `[${formatClockTime(new Date(entry.ts * 1000))}] ${entry.data}${terminator}`
-    );
+    this.streams?.raw.write(entry.data);
   }
 
   public logParsed(item: ParsedFrame): void {

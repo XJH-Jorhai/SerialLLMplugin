@@ -61,7 +61,7 @@ describe("SessionLogger", () => {
     await logger.close();
 
     const rawLog = await fsp.readFile(info.files.rawLog, "utf8");
-    expect(rawLog.trim()).toMatch(/^\[\d{2}:\d{2}:\d{2}\.\d{3}\] System boot$/);
+    expect(rawLog).toBe("System boot\n");
 
     expect(await readJsonLines(info.files.parsedJsonl)).toEqual([
       { ts: 1710000000.123, type: "raw", text: "System boot" }
@@ -77,6 +77,29 @@ describe("SessionLogger", () => {
     expect(await readJsonLines(info.files.commandsJsonl)).toEqual([
       { ts: 1710000002, encoding: "text", data: "status\r\n" }
     ]);
+  });
+
+  it("writes raw serial data without timestamps or artificial line breaks", async () => {
+    const workspace = await createTempWorkspace();
+    const logger = new SessionLogger();
+    const info = await logger.startSession(makeMetadata(workspace));
+
+    logger.logRawData({
+      ts: 1710000000.123,
+      data: "48,4093\r\n349,4093\r\n350,4094\r\n351,",
+      bytes: 36,
+      port: "COM7"
+    });
+    logger.logRawData({
+      ts: 1710000000.133,
+      data: "4093\r\n352,4093\r\n",
+      bytes: 18,
+      port: "COM7"
+    });
+    await logger.close();
+
+    const rawLog = await fsp.readFile(info.files.rawLog, "utf8");
+    expect(rawLog).toBe("48,4093\r\n349,4093\r\n350,4094\r\n351,4093\r\n352,4093\r\n");
   });
 
   it("closes idempotently", async () => {

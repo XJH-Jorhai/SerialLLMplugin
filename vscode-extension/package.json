@@ -2,7 +2,7 @@
   "name": "mcu-serial-bridge",
   "displayName": "MCU Serial Bridge",
   "description": "A VS Code MCU serial bridge for human and agent-readable STM32 debug sessions.",
-  "version": "0.0.1",
+  "version": "1.5.1",
   "publisher": "local",
   "private": true,
   "license": "UNLICENSED",
