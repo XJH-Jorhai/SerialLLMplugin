@@ -52,6 +52,7 @@ export interface BridgeSession {
   workspace?: string;
   mcu?: string;
   elf?: string;
+  projectMetadata?: BridgeProjectMetadata;
   serial: SerialState;
   protocol: string;
   startedAt?: string;
@@ -64,6 +65,57 @@ export interface BridgeSession {
     enabled: boolean;
     directory: string;
     sessionDirectory?: string;
+  };
+}
+
+export interface BridgeProjectMetadata {
+  configPath?: string;
+  project?: {
+    name?: string;
+    root?: string;
+    elf?: string;
+    hex?: string;
+    bin?: string;
+  };
+  mcu?: {
+    vendor?: string;
+    family?: string;
+    target?: string;
+    core?: string;
+    flash?: string;
+    ram?: string;
+  };
+  build?: {
+    configureTask?: string;
+    buildTask?: string;
+    flashTask?: string;
+  };
+  flash?: {
+    tool?: string;
+    probe?: string;
+    target?: string;
+    args?: string[];
+  };
+  debug?: {
+    adapter?: string;
+    server?: string;
+    target?: string;
+    launchConfig?: string;
+  };
+  serial?: {
+    preferredPort?: string | null;
+    fallbackScan?: boolean;
+    baudrate?: number;
+    dataBits?: SerialDataBits;
+    parity?: SerialParity;
+    stopBits?: SerialStopBits;
+    uart?: string;
+    tx?: string;
+    rx?: string;
+  };
+  protocol?: {
+    type: string;
+    fallback?: string;
   };
 }
 

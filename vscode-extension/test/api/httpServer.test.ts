@@ -137,6 +137,23 @@ describe("HttpServer", () => {
     expect(harness.calls.sentText).toEqual([]);
   });
 
+  it("returns a structured validation error for empty serial send bodies", async () => {
+    const harness = createProviderHarness();
+    const { baseUrl } = await startServer(harness.provider);
+
+    const response = await fetch(`${baseUrl}/serial/send`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}"
+    });
+    const body = (await response.json()) as ApiErrorResponse;
+
+    expect(response.status).toBe(400);
+    expect(body.ok).toBe(false);
+    expect(body.error.code).toBe("request.validation");
+    expect(harness.calls.sentText).toEqual([]);
+  });
+
   it("returns a structured error for malformed JSON", async () => {
     const harness = createProviderHarness();
     const { baseUrl } = await startServer(harness.provider);
@@ -167,6 +184,23 @@ describe("HttpServer", () => {
       code: "bridge.host.nonLocal"
     });
     expect(server.nodeServer).toBeUndefined();
+  });
+
+  it("reports a clear error when the HTTP port is already in use", async () => {
+    const harness = createProviderHarness();
+    const { server } = await startServer(harness.provider);
+    const address = server.nodeServer?.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Expected HTTP server to listen on a TCP address.");
+    }
+
+    const conflictingServer = new HttpServer(harness.provider);
+    await expect(
+      conflictingServer.start("127.0.0.1", (address as AddressInfo).port)
+    ).rejects.toMatchObject({
+      code: "bridge.http.portInUse"
+    });
+    expect(conflictingServer.nodeServer).toBeUndefined();
   });
 
   it("stops cleanly and idempotently", async () => {
@@ -212,6 +246,30 @@ describe("HttpServer", () => {
         level: "info",
         message: "bridge started"
       });
+    } finally {
+      client.terminate();
+      await hub.stop();
+    }
+  });
+
+  it("closes WebSocket clients when the hub stops", async () => {
+    const harness = createProviderHarness();
+    const { server, baseUrl } = await startServer(harness.provider);
+    const hub = new WebSocketHub();
+    const nodeServer = server.nodeServer;
+    if (!nodeServer) {
+      throw new Error("Expected HTTP server to be running.");
+    }
+    hub.start(nodeServer, "/stream");
+
+    const client = new WebSocket(`${baseUrl.replace("http://", "ws://")}/stream`);
+    try {
+      await once(client, "open");
+      const closed = once(client, "close");
+
+      await hub.stop();
+
+      await expect(closed).resolves.toBeDefined();
     } finally {
       client.terminate();
       await hub.stop();

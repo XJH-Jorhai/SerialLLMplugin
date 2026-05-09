@@ -48,7 +48,13 @@ export class HttpServer {
 
       const onError = (error: Error): void => {
         server.off("listening", onListening);
-        reject(error);
+        this.server = undefined;
+        try {
+          server.close();
+        } catch {
+          // The failed listen may leave the server without an active handle.
+        }
+        reject(this.toStartError(error, host, port));
       };
       const onListening = (): void => {
         server.off("error", onError);
@@ -248,6 +254,21 @@ export class HttpServer {
         "bridge.host.nonLocal"
       );
     }
+  }
+
+  private toStartError(error: Error, host: string, port: number): BridgeError {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "EADDRINUSE") {
+      return new BridgeError(
+        `Failed to start local bridge API on ${host}:${port}; the port is already in use.`,
+        "bridge.http.portInUse"
+      );
+    }
+
+    return new BridgeError(
+      `Failed to start local bridge API on ${host}:${port}: ${asErrorMessage(error)}`,
+      "bridge.http.startFailed"
+    );
   }
 }
 

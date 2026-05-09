@@ -1,7 +1,7 @@
 export const DEFAULT_CONFIG_FILE = ".vscode/mcu-serial-bridge.yaml";
 export const CONFIG_FILE_ALIASES = [
-  ".vscode/stm32-serial-assistant.yaml",
-  ".vscode/stm32-serial-bridge.yaml"
+  ".vscode/stm32-serial-bridge.yaml",
+  ".vscode/stm32-serial-assistant.yaml"
 ] as const;
 
 export const DEFAULT_BRIDGE_HOST = "127.0.0.1";

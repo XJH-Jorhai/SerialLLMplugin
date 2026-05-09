@@ -23,6 +23,7 @@ const serialStopBitsSchema = z.union([z.literal(1), z.literal(1.5), z.literal(2)
 
 export const bridgeConfigSchema = z.object({
   configFile: z.string().default(DEFAULT_CONFIG_FILE),
+  projectConfigPath: z.string().optional(),
   workspaceRoot: z.string().optional(),
   project: z
     .object({
@@ -38,7 +39,32 @@ export const bridgeConfigSchema = z.object({
       vendor: z.string().optional(),
       family: z.string().optional(),
       target: z.string().optional(),
-      core: z.string().optional()
+      core: z.string().optional(),
+      flash: z.string().optional(),
+      ram: z.string().optional()
+    })
+    .default({}),
+  build: z
+    .object({
+      configureTask: z.string().optional(),
+      buildTask: z.string().optional(),
+      flashTask: z.string().optional()
+    })
+    .default({}),
+  flash: z
+    .object({
+      tool: z.string().optional(),
+      probe: z.string().optional(),
+      target: z.string().optional(),
+      args: z.array(z.string()).optional()
+    })
+    .default({}),
+  debug: z
+    .object({
+      adapter: z.string().optional(),
+      server: z.string().optional(),
+      target: z.string().optional(),
+      launchConfig: z.string().optional()
     })
     .default({}),
   bridge: z
@@ -56,6 +82,7 @@ export const bridgeConfigSchema = z.object({
   serial: z
     .object({
       preferredPort: z.string().nullable().optional(),
+      fallbackScan: z.boolean().optional(),
       defaultBaudrate: z.number().int().positive().default(DEFAULT_BAUDRATE),
       defaultLineEnding: lineEndingSchema.default(DEFAULT_LINE_ENDING),
       dataBits: serialDataBitsSchema.optional(),

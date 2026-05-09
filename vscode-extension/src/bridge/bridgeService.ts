@@ -11,6 +11,7 @@ import { RingBuffer } from "./ringBuffer";
 import { SerialManager } from "./serialManager";
 import {
   BridgeEvent,
+  BridgeProjectMetadata,
   BridgeSession,
   CommandEntry,
   LatestData,
@@ -133,16 +134,28 @@ export class BridgeService implements BridgeApiProvider {
     if (this.running) {
       this.recordEvent("info", "Bridge stopped.", "bridge.stopped");
     }
-    await this.closeSerial();
-    await this.webSocketHub.stop();
-    await this.httpServer.stop();
-    await this.sessionLogger.close();
+
+    const errors: unknown[] = [];
+    await this.tryStopStep(() => this.closeSerial(), errors);
+    await this.tryStopStep(() => this.webSocketHub.stop(), errors);
+    await this.tryStopStep(() => this.httpServer.stop(), errors);
+    await this.tryStopStep(() => this.sessionLogger.close(), errors);
     this.running = false;
     this.startedAt = undefined;
+
+    if (errors.length > 0) {
+      throw errors[0];
+    }
   }
 
   public getSession(): BridgeSession {
     return this.buildSession(this.running);
+  }
+
+  public async getConfigSnapshot(): Promise<BridgeConfig> {
+    const config = this.running ? this.config : await this.configProvider();
+    this.ensureLocalHost(config.bridge.host);
+    return config;
   }
 
   private buildSession(running: boolean): BridgeSession {
@@ -152,6 +165,7 @@ export class BridgeService implements BridgeApiProvider {
       workspace: this.config.workspaceRoot ?? this.config.project.root,
       mcu: this.config.mcu.target,
       elf: this.config.project.elf,
+      projectMetadata: this.buildProjectMetadata(),
       serial: this.getReportedSerialState(),
       protocol: this.config.protocol.type,
       startedAt: this.startedAt,
@@ -166,6 +180,31 @@ export class BridgeService implements BridgeApiProvider {
         sessionDirectory: this.sessionLogger.sessionDirectory
       }
     };
+  }
+
+  private buildProjectMetadata(): BridgeProjectMetadata | undefined {
+    const metadata: BridgeProjectMetadata = {
+      configPath: this.config.projectConfigPath,
+      project: this.config.project,
+      mcu: this.config.mcu,
+      build: this.config.build,
+      flash: this.config.flash,
+      debug: this.config.debug,
+      serial: {
+        preferredPort: this.config.serial.preferredPort,
+        fallbackScan: this.config.serial.fallbackScan,
+        baudrate: this.config.serial.defaultBaudrate,
+        dataBits: this.config.serial.dataBits,
+        parity: this.config.serial.parity,
+        stopBits: this.config.serial.stopBits,
+        uart: this.config.serial.uart,
+        tx: this.config.serial.tx,
+        rx: this.config.serial.rx
+      },
+      protocol: this.config.protocol
+    };
+
+    return hasProjectMetadata(metadata) ? metadata : undefined;
   }
 
   public async listPorts(): Promise<SerialPortInfo[]> {
@@ -325,6 +364,17 @@ export class BridgeService implements BridgeApiProvider {
     }
   }
 
+  private async tryStopStep(
+    step: () => Promise<unknown>,
+    errors: unknown[]
+  ): Promise<void> {
+    try {
+      await step();
+    } catch (error: unknown) {
+      errors.push(error);
+    }
+  }
+
   private recordParserOutputs(outputs: ParserOutput[]): void {
     for (const output of outputs) {
       switch (output.type) {
@@ -343,4 +393,30 @@ export class BridgeService implements BridgeApiProvider {
       }
     }
   }
+}
+
+function hasProjectMetadata(metadata: BridgeProjectMetadata): boolean {
+  return Boolean(
+    metadata.configPath ||
+      hasDefinedValue(metadata.project) ||
+      hasDefinedValue(metadata.mcu) ||
+      hasDefinedValue(metadata.build) ||
+      hasDefinedValue(metadata.flash) ||
+      hasDefinedValue(metadata.debug)
+  );
+}
+
+function hasDefinedValue(value: unknown): boolean {
+  if (typeof value !== "object" || value === null) {
+    return value !== undefined;
+  }
+  return Object.values(value).some((entry) => {
+    if (Array.isArray(entry)) {
+      return entry.length > 0;
+    }
+    if (typeof entry === "object" && entry !== null) {
+      return hasDefinedValue(entry);
+    }
+    return entry !== undefined;
+  });
 }

@@ -15,29 +15,62 @@ export function renderBridgePanelHtml(): string {
       color-scheme: light dark;
     }
     body {
+      height: 100vh;
       margin: 0;
-      padding: 14px;
+      padding: 0;
       font-family: var(--vscode-font-family);
       color: var(--vscode-foreground);
       background: var(--vscode-editor-background);
       font-size: var(--vscode-font-size);
+      overflow: hidden;
     }
-    header {
+    .shell {
+      box-sizing: border-box;
       display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      align-items: flex-start;
-      margin-bottom: 12px;
+      flex-direction: column;
+      gap: 6px;
+      height: 100vh;
+      min-height: 0;
+      padding: 6px;
     }
-    h1 {
-      margin: 0 0 4px;
-      font-size: 17px;
-      font-weight: 600;
+    .command-strip {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-height: 28px;
+      padding-bottom: 5px;
+      border-bottom: 1px solid var(--vscode-panel-border);
+    }
+    .command-group,
+    .serial-row,
+    .send-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+    .command-group {
+      flex: 0 0 auto;
+      flex-wrap: wrap;
     }
     h2 {
-      margin: 0 0 8px;
-      font-size: 13px;
+      margin: 0;
+      color: var(--vscode-descriptionForeground);
+      font-size: 11px;
       font-weight: 600;
+      text-transform: uppercase;
+    }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
     }
     button,
     input,
@@ -48,8 +81,8 @@ export function renderBridgePanelHtml(): string {
       color: var(--vscode-button-foreground);
       background: var(--vscode-button-background);
       border: 1px solid var(--vscode-button-border, transparent);
-      padding: 4px 10px;
-      min-height: 26px;
+      padding: 2px 8px;
+      min-height: 24px;
       cursor: pointer;
     }
     button:hover {
@@ -68,89 +101,127 @@ export function renderBridgePanelHtml(): string {
     }
     input,
     select {
-      min-height: 26px;
+      box-sizing: border-box;
+      min-height: 24px;
       color: var(--vscode-input-foreground);
       background: var(--vscode-input-background);
       border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
-      padding: 3px 7px;
+      padding: 2px 6px;
     }
     .status {
-      text-align: right;
-      line-height: 1.45;
+      display: flex;
+      flex: 1 1 auto;
+      justify-content: flex-end;
+      gap: 5px;
+      min-width: 120px;
+      overflow: hidden;
       color: var(--vscode-descriptionForeground);
+      white-space: nowrap;
     }
     .status strong {
       color: var(--vscode-foreground);
       font-weight: 600;
     }
-    .toolbar,
-    .serial-row,
-    .send-row {
+    .status div {
+      min-width: 0;
+      max-width: 260px;
+      overflow: hidden;
+      padding: 2px 6px;
+      border: 1px solid var(--vscode-panel-border);
+      text-overflow: ellipsis;
+    }
+    .serial-strip {
       display: flex;
-      gap: 8px;
       align-items: center;
+      gap: 6px;
+      min-height: 28px;
+      min-width: 0;
+      padding-bottom: 5px;
+      border-bottom: 1px solid var(--vscode-panel-border);
+    }
+    .serial-row {
+      flex: 1 1 auto;
       flex-wrap: wrap;
-      margin-bottom: 10px;
     }
     .serial-row label {
       display: flex;
-      flex-direction: column;
-      gap: 3px;
-      min-width: 130px;
+      align-items: center;
+      gap: 4px;
+      min-width: 0;
       color: var(--vscode-descriptionForeground);
     }
     .serial-row select {
-      min-width: 220px;
+      width: clamp(130px, 20vw, 230px);
     }
     .serial-row input[name="manualPort"] {
-      min-width: 160px;
+      width: clamp(110px, 16vw, 180px);
     }
     .serial-row input[name="baudrate"] {
-      width: 110px;
+      width: 88px;
     }
-    .send-row input {
-      flex: 1 1 260px;
-      min-width: 160px;
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(220px, 28%);
+      gap: 6px;
+      flex: 1 1 auto;
+      min-height: 0;
     }
-    section {
-      border-top: 1px solid var(--vscode-panel-border);
-      padding-top: 10px;
-      margin-top: 10px;
+    .terminal-pane,
+    .inspector {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      min-width: 0;
     }
     .terminal {
-      height: 260px;
+      flex: 1 1 auto;
+      min-height: 0;
       overflow: auto;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
-      padding: 9px;
+      padding: 6px 8px;
       color: var(--vscode-terminal-foreground, var(--vscode-editor-foreground));
       background: var(--vscode-terminal-background, var(--vscode-editorWidget-background));
       border: 1px solid var(--vscode-panel-border);
       font-family: var(--vscode-editor-font-family);
       font-size: var(--vscode-editor-font-size);
-      line-height: 1.45;
+      line-height: 1.35;
     }
-    .two-column {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      gap: 12px;
+    .send-row {
+      flex: 0 0 auto;
+      padding-top: 6px;
+    }
+    .send-row input {
+      flex: 1 1 auto;
+      min-width: 80px;
     }
     pre,
     .events {
-      min-height: 130px;
-      max-height: 230px;
+      flex: 1 1 0;
+      min-height: 0;
       overflow: auto;
       margin: 0;
-      padding: 9px;
+      padding: 6px;
       background: var(--vscode-editorWidget-background);
       border: 1px solid var(--vscode-panel-border);
       white-space: pre-wrap;
       overflow-wrap: anywhere;
       font-family: var(--vscode-editor-font-family);
       font-size: var(--vscode-editor-font-size);
+      line-height: 1.35;
+    }
+    .inspector-section {
+      display: flex;
+      flex: 1 1 0;
+      flex-direction: column;
+      gap: 4px;
+      min-height: 0;
+    }
+    .inspector-section + .inspector-section {
+      padding-top: 6px;
     }
     .event-row {
-      margin-bottom: 6px;
+      margin-bottom: 4px;
       line-height: 1.35;
     }
     .event-row.error {
@@ -160,85 +231,105 @@ export function renderBridgePanelHtml(): string {
       color: var(--vscode-editorWarning-foreground, var(--vscode-foreground));
     }
     .message {
+      flex: 0 0 auto;
       min-height: 18px;
-      margin-top: 8px;
+      overflow: hidden;
       color: var(--vscode-descriptionForeground);
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .message.error {
       color: var(--vscode-errorForeground);
     }
-    @media (max-width: 760px) {
-      header {
-        display: block;
+    @media (max-width: 820px) {
+      .command-strip,
+      .serial-strip {
+        align-items: flex-start;
+        flex-direction: column;
       }
       .status {
-        margin-top: 8px;
-        text-align: left;
+        justify-content: flex-start;
+        width: 100%;
       }
-      .two-column {
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+      .inspector {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 6px;
+        min-height: 82px;
+        max-height: 38%;
+      }
+      .inspector-section + .inspector-section {
+        padding-top: 0;
+      }
+    }
+    @media (max-width: 520px) {
+      .inspector {
         grid-template-columns: 1fr;
       }
     }
   </style>
 </head>
 <body>
-  <header>
-    <div>
-      <h1>MCU Serial Bridge</h1>
+  <div class="shell">
+    <div class="command-strip" role="toolbar" aria-label="Bridge commands">
+      <div class="command-group">
+        <button id="startBridge" title="Start local bridge">Start</button>
+        <button id="stopBridge" class="secondary" title="Stop local bridge">Stop</button>
+        <button id="refresh" class="secondary" title="Refresh bridge state">Refresh</button>
+        <button id="openLogs" class="secondary" title="Open active session log folder">Logs</button>
+      </div>
+      <div id="status" class="status" title="Bridge status">Waiting for bridge state...</div>
     </div>
-    <div id="status" class="status">Waiting for bridge state...</div>
-  </header>
 
-  <div class="toolbar">
-    <button id="startBridge">Start Bridge</button>
-    <button id="stopBridge" class="secondary">Stop Bridge</button>
-    <button id="refresh" class="secondary">Refresh</button>
-    <button id="openLogs" class="secondary">Open Log Folder</button>
+    <div class="serial-strip" role="toolbar" aria-label="Serial port controls">
+      <h2>Serial</h2>
+      <div class="serial-row">
+      <label>
+        <span class="sr-only">Detected port</span>
+        <select id="portSelect" title="Detected serial port" aria-label="Detected serial port"></select>
+      </label>
+      <label>
+        <span class="sr-only">Manual port</span>
+        <input id="manualPort" name="manualPort" placeholder="Manual port" title="Manual serial port" aria-label="Manual serial port">
+      </label>
+      <label>
+        <span class="sr-only">Baudrate</span>
+        <input id="baudrate" name="baudrate" inputmode="numeric" value="115200" title="Baudrate" aria-label="Baudrate">
+      </label>
+        <button id="listPorts" class="secondary" title="List detected serial ports">List</button>
+        <button id="openSerial" title="Open selected serial port">Open</button>
+        <button id="closeSerial" class="secondary" title="Close serial port">Close</button>
+      </div>
+    </div>
+
+    <main class="workspace">
+      <section class="terminal-pane" aria-label="Raw serial terminal">
+        <div id="terminal" class="terminal" aria-live="polite" role="log"></div>
+        <div class="send-row">
+          <label class="sr-only" for="sendValue">Command text</label>
+          <input id="sendValue" placeholder="Send command" title="Command text" aria-label="Command text">
+          <button id="sendLine" title="Send command with configured line ending">Send</button>
+          <button id="clearTerminal" class="secondary" title="Clear terminal view">Clear</button>
+        </div>
+      </section>
+
+      <aside class="inspector" aria-label="Parsed data and events">
+        <section class="inspector-section">
+          <h2>Parsed</h2>
+          <pre id="parsedPreview">No parsed frames yet.</pre>
+        </section>
+        <section class="inspector-section">
+          <h2>Events</h2>
+          <div id="events" class="events">No events yet.</div>
+        </section>
+      </aside>
+    </main>
+
+    <div id="message" class="message" role="status"></div>
   </div>
-
-  <section>
-    <h2>Serial</h2>
-    <div class="serial-row">
-      <label>
-        Detected port
-        <select id="portSelect"></select>
-      </label>
-      <label>
-        Manual port
-        <input id="manualPort" name="manualPort" placeholder="COM port or /dev/ttyUSBx">
-      </label>
-      <label>
-        Baudrate
-        <input id="baudrate" name="baudrate" inputmode="numeric" value="115200">
-      </label>
-      <button id="listPorts" class="secondary">List Ports</button>
-      <button id="openSerial">Open</button>
-      <button id="closeSerial" class="secondary">Close</button>
-    </div>
-  </section>
-
-  <section>
-    <h2>Raw Output</h2>
-    <div id="terminal" class="terminal" aria-live="polite"></div>
-    <div class="send-row">
-      <input id="sendValue" placeholder="Command text">
-      <button id="sendLine">Send</button>
-      <button id="clearTerminal" class="secondary">Clear View</button>
-    </div>
-  </section>
-
-  <section class="two-column">
-    <div>
-      <h2>Latest Parsed</h2>
-      <pre id="parsedPreview">No parsed frames yet.</pre>
-    </div>
-    <div>
-      <h2>Events</h2>
-      <div id="events" class="events">No events yet.</div>
-    </div>
-  </section>
-
-  <div id="message" class="message"></div>
 
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();

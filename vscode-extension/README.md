@@ -12,15 +12,17 @@ MVP1 focuses on the serial bridge and logging path:
 - Start and stop a local HTTP/WebSocket bridge on `127.0.0.1`.
 - Open one selected serial port with a configurable baudrate and 8N1 defaults.
 - Read raw serial chunks and completed raw lines.
-- Display raw output, latest parsed frames, and events in a minimal VS Code Webview.
+- Display raw output, latest parsed frames, and events in the bottom `MCU Debug > Serial` Webview View.
 - Send text commands from VS Code or the local API.
 - Write per-session `session.json`, `raw.log`, `parsed.jsonl`, `events.jsonl`, and `commands.jsonl`.
 - Expose `GET /session`, `GET /ports`, `GET /latest`, `GET /logs`, `POST /serial/open`, `POST /serial/close`, `POST /serial/send`, and `WS /stream`.
 - Parse `raw-text` and `json-line` protocol output. Invalid JSON lines become recoverable warning events.
+- Discover project configuration from `.vscode/mcu-serial-bridge.yaml`, `.vscode/stm32-serial-bridge.yaml`, or `.vscode/stm32-serial-assistant.yaml`.
+- Invoke existing VS Code build and flash tasks by configured task labels.
 
 ## Not Included In MVP1
 
-- Build, flash, and build-flash-open-serial task integration. The commands exist but currently report that task integration is not implemented.
+- Creating or modifying build, flash, debug, `.vscode/tasks.json`, or `.vscode/launch.json` files. Build and flash commands only invoke existing VS Code tasks by configured labels.
 - Cortex-Debug, pyOCD, or probe lifecycle control.
 - VOFA FireWater, waveform plotting, channel controls, binary framing, or protocol designer UI.
 - External network binding. MVP1 rejects non-local HTTP/WebSocket hosts.
@@ -60,6 +62,20 @@ npm.cmd test
 
 The automated tests are no-hardware tests. They use fake serial ports, temporary log directories, and local HTTP/WebSocket test servers.
 
+## Release Docs
+
+Repository-level docs:
+
+- `docs/api.md`
+- `docs/manual-test-plan.md`
+- `docs/mvp1-release-checklist.md`
+- `CHANGELOG.md`
+
+PowerShell smoke scripts:
+
+- `scripts/smoke-latest.ps1`
+- `scripts/send-command.ps1`
+
 ## Launch In Extension Development Host
 
 1. Open `C:\Users\20101\Desktop\SerialLLMplugin\vscode-extension` in VS Code.
@@ -75,12 +91,21 @@ Alternative CLI launch:
 code --extensionDevelopmentPath="C:\Users\20101\Desktop\SerialLLMplugin\vscode-extension"
 ```
 
+## Open The Serial View
+
+The recommended human UI entry point is the bottom Panel view:
+
+- Command Palette: `MCU Serial Bridge: Focus Serial View`.
+- VS Code bottom Panel: `MCU Debug > Serial`.
+
+The legacy command `MCU Serial Bridge: Open Panel` is still available for compatibility. It now focuses the same bottom `MCU Debug > Serial` view instead of opening a separate large panel.
+
 ## Start The Bridge
 
 Use either path:
 
 - Command Palette: `MCU Serial Bridge: Start Bridge`.
-- Command Palette: `MCU Serial Bridge: Open Panel`, then click `Start Bridge`.
+- Open `MCU Debug > Serial`, then click `Start Bridge`.
 
 By default the bridge listens on:
 
@@ -89,14 +114,14 @@ http://127.0.0.1:8765
 ws://127.0.0.1:8765/stream
 ```
 
-Opening a serial port from the panel or command palette also starts the bridge if it is not already running.
+Opening a serial port from the Serial view or command palette also starts the bridge if it is not already running.
 
 ## List Ports
 
 Use one of:
 
 - Command Palette: `MCU Serial Bridge: List Ports`.
-- Panel: click `List Ports`.
+- `MCU Debug > Serial`: click `List Ports`.
 - API after the bridge is running:
 
 ```powershell
@@ -108,7 +133,7 @@ Invoke-RestMethod -Uri "http://127.0.0.1:8765/ports"
 Use one of:
 
 - Command Palette: `MCU Serial Bridge: Open Serial Port`, select or enter a port, then enter a baudrate.
-- Panel: select a detected port or enter a manual port, enter a baudrate, then click `Open`.
+- `MCU Debug > Serial`: select a detected port or enter a manual port, enter a baudrate, then click `Open`.
 - API after the bridge is running:
 
 ```powershell
@@ -132,7 +157,7 @@ Close other serial monitors before opening the port. Windows serial ports are us
 Use one of:
 
 - Command Palette: `MCU Serial Bridge: Send Line`. This appends the configured `mcuSerialBridge.serial.defaultLineEnding`, which defaults to `\r\n`.
-- Panel: type a command in the send box and click `Send`. This also appends the configured default line ending.
+- `MCU Debug > Serial`: type a command in the send box and click `Send`. This also appends the configured default line ending.
 - API after the bridge is running and the serial port is open:
 
 ```powershell
@@ -213,7 +238,7 @@ When logging is enabled, session logs are created under the configured logging d
     commands.jsonl
 ```
 
-Use `MCU Serial Bridge: Open Session Folder` or the panel `Open Log Folder` button to reveal the active session directory. If no session is active, there is no log folder to open.
+Use `MCU Serial Bridge: Open Session Folder` or the Serial view `Open Log Folder` button to reveal the active session directory. If no session is active, there is no log folder to open.
 
 ## Settings
 
@@ -224,6 +249,9 @@ Default settings:
   "mcuSerialBridge.configFile": ".vscode/mcu-serial-bridge.yaml",
   "mcuSerialBridge.bridge.host": "127.0.0.1",
   "mcuSerialBridge.bridge.port": 8765,
+  "mcuSerialBridge.build.configureTask": "",
+  "mcuSerialBridge.build.buildTask": "",
+  "mcuSerialBridge.build.flashTask": "",
   "mcuSerialBridge.serial.defaultBaudrate": 115200,
   "mcuSerialBridge.serial.defaultLineEnding": "\r\n",
   "mcuSerialBridge.logging.enabled": true,
@@ -231,4 +259,51 @@ Default settings:
 }
 ```
 
-The project config loader also accepts `.vscode/mcu-serial-bridge.yaml` and the backward-compatible aliases `.vscode/stm32-serial-assistant.yaml` and `.vscode/stm32-serial-bridge.yaml` when the default config path is used.
+The project config loader also accepts `.vscode/mcu-serial-bridge.yaml` and the backward-compatible aliases `.vscode/stm32-serial-bridge.yaml` and `.vscode/stm32-serial-assistant.yaml` when the default config path is used.
+
+## Project Configuration
+
+The loader checks these files in order when `mcuSerialBridge.configFile` remains at the default:
+
+1. `.vscode/mcu-serial-bridge.yaml`
+2. `.vscode/stm32-serial-bridge.yaml`
+3. `.vscode/stm32-serial-assistant.yaml`
+
+Example:
+
+```yaml
+project:
+  name: demo
+  elf: build/Debug/demo.elf
+
+mcu:
+  family: STM32F4
+  target: STM32F407VETx
+  core: cortex-m4
+
+build:
+  buildTask: "Build Debug"
+  flashTask: "Flash via Existing Tool"
+
+serial:
+  preferredPort: null
+  baudrate: 115200
+  dataBits: 8
+  parity: none
+  stopBits: 1
+
+protocol:
+  type: raw-text
+```
+
+When metadata exists, `GET /session` includes it under `projectMetadata`. The bridge does not auto-open a scanned serial port; `Build, Flash, and Open Serial` opens serial only when `serial.preferredPort` is explicitly configured.
+
+## Build And Flash Commands
+
+These commands call existing VS Code tasks by label:
+
+- `MCU Serial Bridge: Build` uses `build.buildTask`.
+- `MCU Serial Bridge: Flash` uses `build.flashTask`.
+- `MCU Serial Bridge: Build, Flash, and Open Serial` runs both in order, then opens `serial.preferredPort` if configured.
+
+If a label is missing or no matching VS Code task exists, the extension shows a diagnostic. It does not edit workspace task or debug configuration files.

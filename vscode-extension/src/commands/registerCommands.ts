@@ -1,20 +1,26 @@
 import * as vscode from "vscode";
 import { BridgeService } from "../bridge/bridgeService";
 import { DEFAULT_BAUDRATE, DEFAULT_LINE_ENDING } from "../config/defaults";
-import { asErrorMessage, BridgeError } from "../util/errors";
-import { BridgePanel } from "../webview/panel";
+import { runConfiguredTask } from "../tasks/taskIntegration";
+import { asErrorMessage } from "../util/errors";
+import { BridgeSerialViewProvider } from "../webview/viewProvider";
 
 export function registerCommands(
   context: vscode.ExtensionContext,
-  bridge: BridgeService
+  bridge: BridgeService,
+  serialViewProvider: BridgeSerialViewProvider
 ): void {
   register(context, "mcuSerialBridge.openPanel", async () => {
-    BridgePanel.show(context, bridge);
+    await serialViewProvider.focus();
+  });
+
+  register(context, "mcuSerialBridge.focusSerialView", async () => {
+    await serialViewProvider.focus();
   });
 
   register(context, "mcuSerialBridge.startBridge", async () => {
     const session = await bridge.start();
-    BridgePanel.refreshCurrent();
+    serialViewProvider.refresh();
     void vscode.window.showInformationMessage(
       `MCU Serial Bridge listening on ${session.api.host}:${session.api.port}.`
     );
@@ -22,7 +28,7 @@ export function registerCommands(
 
   register(context, "mcuSerialBridge.stopBridge", async () => {
     await bridge.stop();
-    BridgePanel.refreshCurrent();
+    serialViewProvider.refresh();
     void vscode.window.showInformationMessage("MCU Serial Bridge stopped.");
   });
 
@@ -64,13 +70,13 @@ export function registerCommands(
       path: selected,
       baudrate
     });
-    BridgePanel.refreshCurrent();
+    serialViewProvider.refresh();
     void vscode.window.showInformationMessage(`Serial port opened: ${selected} @ ${baudrate}.`);
   });
 
   register(context, "mcuSerialBridge.closeSerial", async () => {
     await bridge.closeSerial();
-    BridgePanel.refreshCurrent();
+    serialViewProvider.refresh();
     void vscode.window.showInformationMessage("Serial port closed.");
   });
 
@@ -87,27 +93,44 @@ export function registerCommands(
       .getConfiguration("mcuSerialBridge")
       .get<string>("serial.defaultLineEnding", DEFAULT_LINE_ENDING);
     await bridge.sendText(`${value}${lineEnding}`);
-    BridgePanel.refreshCurrent();
+    serialViewProvider.refresh();
   });
 
-  register(context, "mcuSerialBridge.build", () => {
-    throw new BridgeError(
-      "Build task integration is scaffolded but not implemented yet.",
-      "task.build.notImplemented"
-    );
+  register(context, "mcuSerialBridge.build", async () => {
+    const config = await bridge.getConfigSnapshot();
+    await runConfiguredTask(config, "build");
+    void vscode.window.showInformationMessage("MCU Serial Bridge build task completed.");
   });
 
-  register(context, "mcuSerialBridge.flash", () => {
-    throw new BridgeError(
-      "Flash task integration is scaffolded but not implemented yet.",
-      "task.flash.notImplemented"
-    );
+  register(context, "mcuSerialBridge.flash", async () => {
+    const config = await bridge.getConfigSnapshot();
+    await runConfiguredTask(config, "flash");
+    void vscode.window.showInformationMessage("MCU Serial Bridge flash task completed.");
   });
 
-  register(context, "mcuSerialBridge.buildFlashOpenSerial", () => {
-    throw new BridgeError(
-      "Build, flash, and open serial workflow is scaffolded but not implemented yet.",
-      "task.buildFlashOpenSerial.notImplemented"
+  register(context, "mcuSerialBridge.buildFlashOpenSerial", async () => {
+    const config = await bridge.getConfigSnapshot();
+    await runConfiguredTask(config, "build");
+    await runConfiguredTask(config, "flash");
+
+    const preferredPort = config.serial.preferredPort?.trim();
+    if (!preferredPort) {
+      void vscode.window.showWarningMessage(
+        "Build and flash completed. No preferred serial port is configured; open a serial port manually."
+      );
+      return;
+    }
+
+    await bridge.openSerial({
+      path: preferredPort,
+      baudrate: config.serial.defaultBaudrate,
+      dataBits: config.serial.dataBits,
+      parity: config.serial.parity,
+      stopBits: config.serial.stopBits
+    });
+    serialViewProvider.refresh();
+    void vscode.window.showInformationMessage(
+      `Build, flash, and serial open completed: ${preferredPort} @ ${config.serial.defaultBaudrate}.`
     );
   });
 
@@ -132,10 +155,6 @@ function register(
         await handler();
       } catch (error: unknown) {
         const message = asErrorMessage(error);
-        if (error instanceof BridgeError && error.code.endsWith("notImplemented")) {
-          void vscode.window.showWarningMessage(message);
-          return;
-        }
         void vscode.window.showErrorMessage(message);
       }
     })

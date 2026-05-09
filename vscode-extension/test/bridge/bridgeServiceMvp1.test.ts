@@ -194,6 +194,130 @@ describe("BridgeService MVP1 integration", () => {
       await bridge.stop();
     }
   });
+
+  it("can start and stop repeatedly on the same bridge instance without leaking the server", async () => {
+    const workspace = await createTempWorkspace();
+    const apiPort = await getFreePort();
+    const serial = createSerialHarness();
+    const bridge = createBridge(workspace, apiPort, serial, false);
+    const baseUrl = `http://127.0.0.1:${apiPort}`;
+
+    try {
+      await bridge.start();
+      await expect(fetch(`${baseUrl}/session`)).resolves.toMatchObject({ status: 200 });
+      await bridge.stop();
+
+      await bridge.start();
+      const response = await fetch(`${baseUrl}/session`);
+      const session = (await response.json()) as BridgeSession;
+
+      expect(response.status).toBe(200);
+      expect(session.running).toBe(true);
+    } finally {
+      await bridge.stop();
+    }
+  });
+
+  it("records a recoverable serial disconnect event through the bridge service", async () => {
+    const workspace = await createTempWorkspace();
+    const apiPort = await getFreePort();
+    const serial = createSerialHarness();
+    const bridge = createBridge(workspace, apiPort, serial, false);
+
+    try {
+      await bridge.start();
+      await bridge.openSerial({ path: "COM_TEST" });
+      serial.requirePort().disconnect(new Error("device removed"));
+
+      expect(bridge.getLatest(999999).events).toContainEqual(
+        expect.objectContaining({
+          level: "warning",
+          code: "serial.disconnected",
+          message: expect.stringContaining("device removed")
+        })
+      );
+      expect(bridge.getSession().serial.open).toBe(false);
+    } finally {
+      await bridge.stop();
+    }
+  });
+
+  it("keeps bridge latest buffers bounded by maxRecentItems", () => {
+    const bridge = new BridgeService({
+      configProvider: () =>
+        Promise.resolve(bridgeConfigSchema.parse({ logging: { enabled: false } })),
+      maxRecentItems: 2
+    });
+
+    bridge.recordRawLine({ ts: 10, data: "one" });
+    bridge.recordRawLine({ ts: 11, data: "two" });
+    bridge.recordRawLine({ ts: 12, data: "three" });
+
+    const latest = bridge.getLatest(Number.MAX_SAFE_INTEGER);
+    expect(latest.rawLines.map((line) => line.data)).toEqual(["two", "three"]);
+    expect(latest.parsed.map((frame) => (frame.type === "raw" ? frame.text : ""))).toEqual([
+      "two",
+      "three"
+    ]);
+  });
+
+  it("exposes loaded project metadata in the session response", async () => {
+    const workspace = await createTempWorkspace();
+    const apiPort = await getFreePort();
+    const serial = createSerialHarness();
+    const configPath = path.join(workspace, ".vscode", "mcu-serial-bridge.yaml");
+    const bridge = new BridgeService({
+      configProvider: () =>
+        Promise.resolve(
+          bridgeConfigSchema.parse({
+            projectConfigPath: configPath,
+            workspaceRoot: workspace,
+            project: {
+              name: "portable-demo",
+              elf: "build/Debug/portable-demo.elf"
+            },
+            mcu: {
+              family: "STM32F4",
+              target: "STM32F407VETx",
+              core: "cortex-m4"
+            },
+            build: {
+              buildTask: "Build Debug",
+              flashTask: "Flash via Existing Tool"
+            },
+            bridge: { host: "127.0.0.1", port: apiPort },
+            logging: { enabled: false }
+          })
+        ),
+      serialManager: serial.manager
+    });
+
+    try {
+      await bridge.start();
+      const response = await fetch(`http://127.0.0.1:${apiPort}/session`);
+      const session = (await response.json()) as BridgeSession;
+
+      expect(response.status).toBe(200);
+      expect(session.projectMetadata).toMatchObject({
+        configPath,
+        project: {
+          name: "portable-demo",
+          elf: "build/Debug/portable-demo.elf"
+        },
+        mcu: {
+          family: "STM32F4",
+          target: "STM32F407VETx",
+          core: "cortex-m4"
+        },
+        build: {
+          buildTask: "Build Debug",
+          flashTask: "Flash via Existing Tool"
+        }
+      });
+    } finally {
+      await bridge.stop();
+    }
+  });
 });
 
 interface SerialHarness {
@@ -301,6 +425,11 @@ class FakeSerialPort extends EventEmitter implements SerialPortLike {
 
   public pushData(data: string | Buffer): void {
     this.emit("data", Buffer.isBuffer(data) ? data : Buffer.from(data, "utf8"));
+  }
+
+  public disconnect(error: Error): void {
+    this.isOpen = false;
+    this.emit("close", error);
   }
 }
 

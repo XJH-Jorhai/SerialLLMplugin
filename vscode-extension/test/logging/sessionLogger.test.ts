@@ -86,6 +86,7 @@ describe("SessionLogger", () => {
 
     await logger.close();
     await logger.close();
+    expect(() => logger.logEvent({ ts: 1, level: "info", message: "after close" })).not.toThrow();
 
     expect(logger.getSessionInfo()?.directory).toBe(logger.sessionDirectory);
   });
