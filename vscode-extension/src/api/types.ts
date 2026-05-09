@@ -4,6 +4,7 @@ import {
   BridgeSession,
   CommandEntry,
   LatestData,
+  LatestDataLimits,
   ParsedFrame,
   SerialOpenOptions,
   SerialPortInfo,
@@ -16,7 +17,7 @@ export interface BridgeApiProvider {
   openSerial(options: SerialOpenOptions): Promise<SerialState>;
   closeSerial(): Promise<SerialState>;
   sendText(data: string): Promise<CommandEntry>;
-  getLatest(seconds?: number): LatestData;
+  getLatest(seconds?: number, limits?: LatestDataLimits): LatestData;
 }
 
 export interface ApiErrorBody {

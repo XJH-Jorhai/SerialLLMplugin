@@ -15,6 +15,7 @@ import {
   BridgeSession,
   CommandEntry,
   LatestData,
+  LatestDataLimits,
   ParsedFrame,
   RawDataEntry,
   RawLineEntry,
@@ -48,6 +49,8 @@ export class BridgeService implements BridgeApiProvider {
   private parser: ProtocolParser = createProtocolParser(this.config.protocol.type);
   private startedAt: string | undefined;
   private running = false;
+  private acceptingSerialData = true;
+  private nextRawDataSequence = 1;
 
   public constructor(options: BridgeServiceOptions = {}) {
     this.configProvider =
@@ -87,6 +90,7 @@ export class BridgeService implements BridgeApiProvider {
 
     this.config = await this.configProvider();
     this.ensureLocalHost(this.config.bridge.host);
+    this.acceptingSerialData = true;
     const requestedProtocol = this.config.protocol.type;
     this.parser = createProtocolParser(requestedProtocol);
     const unsupportedProtocol =
@@ -134,6 +138,7 @@ export class BridgeService implements BridgeApiProvider {
     if (this.running) {
       this.recordEvent("info", "Bridge stopped.", "bridge.stopped");
     }
+    this.acceptingSerialData = false;
 
     const errors: unknown[] = [];
     await this.tryStopStep(() => this.closeSerial(), errors);
@@ -241,37 +246,52 @@ export class BridgeService implements BridgeApiProvider {
     return command;
   }
 
-  public getLatest(seconds?: number): LatestData {
+  public getLatest(seconds?: number, limits: LatestDataLimits = {}): LatestData {
     const windowSeconds = seconds ?? this.config.bridge.latestWindowSeconds;
     const cutoff = nowEpochSeconds() - windowSeconds;
-    const rawData = this.rawData.latestSince(cutoff);
-    const rawLines = this.rawLines.latestSince(cutoff);
-    const parsed = this.parsed.latestSince(cutoff);
+    const rawData = limitRawData(
+      this.rawData.latestSince(cutoff),
+      limits.rawData,
+      limits.rawDataBytes
+    );
+    const rawLines = limitTail(this.rawLines.latestSince(cutoff), limits.rawLines);
+    const parsed = limitTail(this.parsed.latestSince(cutoff), limits.parsed);
     return {
       windowSeconds,
       rawData,
       rawLines,
       parsed,
       samples: parsed.filter((entry): entry is SampleFrame => entry.type === "sample"),
-      events: this.events.latestSince(cutoff),
-      commands: this.commands.latestSince(cutoff)
+      events: limitTail(this.events.latestSince(cutoff), limits.events),
+      commands: limitTail(this.commands.latestSince(cutoff), limits.commands)
     };
   }
 
   public recordRawData(entry: RawDataEntry): void {
+    if (!this.acceptingSerialData) {
+      return;
+    }
     if (entry.data.length === 0 && entry.bytes === 0) {
       return;
     }
 
-    // Raw data is recorded before protocol parsing by design.
-    this.rawData.push(entry);
-    this.sessionLogger.logRawData(entry);
-    this.webSocketHub.broadcast({ type: "raw", ts: entry.ts, data: entry.data });
+    const storedEntry = {
+      ...entry,
+      sequence: entry.sequence ?? this.nextRawDataSequence++
+    };
 
-    this.recordParserOutputs(this.parser.pushText(entry.data, entry.ts));
+    // Raw data is recorded before protocol parsing by design.
+    this.rawData.push(storedEntry);
+    this.sessionLogger.logRawData(storedEntry);
+    this.webSocketHub.broadcast({ type: "raw", ts: storedEntry.ts, data: storedEntry.data });
+
+    this.recordParserOutputs(this.parser.pushText(storedEntry.data, storedEntry.ts));
   }
 
   public recordRawLine(line: RawLineEntry): void {
+    if (!this.acceptingSerialData) {
+      return;
+    }
     // Raw data is recorded before protocol parsing by design.
     this.recordRawLineEntry(line);
     this.sessionLogger.logRawLine(line);
@@ -345,6 +365,7 @@ export class BridgeService implements BridgeApiProvider {
   }
 
   private async cleanupFailedStart(): Promise<void> {
+    this.acceptingSerialData = false;
     this.running = false;
     this.startedAt = undefined;
     try {
@@ -419,4 +440,41 @@ function hasDefinedValue(value: unknown): boolean {
     }
     return entry !== undefined;
   });
+}
+
+function limitTail<T>(items: T[], maxItems: number | undefined): T[] {
+  if (maxItems === undefined || items.length <= maxItems) {
+    return items;
+  }
+  return items.slice(items.length - maxItems);
+}
+
+function limitRawData(
+  entries: RawDataEntry[],
+  maxItems: number | undefined,
+  maxBytes: number | undefined
+): RawDataEntry[] {
+  const itemLimited = limitTail(entries, maxItems);
+  if (maxBytes === undefined || maxBytes <= 0) {
+    return itemLimited;
+  }
+
+  const limited: RawDataEntry[] = [];
+  let bytes = 0;
+  for (let index = itemLimited.length - 1; index >= 0; index -= 1) {
+    const entry = itemLimited[index];
+    if (!entry) {
+      continue;
+    }
+    const entryBytes = Buffer.byteLength(entry.data, "utf8");
+    if (limited.length > 0 && bytes + entryBytes > maxBytes) {
+      break;
+    }
+    limited.unshift(entry);
+    bytes += entryBytes;
+    if (bytes >= maxBytes) {
+      break;
+    }
+  }
+  return limited;
 }

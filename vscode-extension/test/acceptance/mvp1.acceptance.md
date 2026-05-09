@@ -207,7 +207,7 @@ AC4 raw per-session logs: pass
 AC5 no VOFA+/Serial Studio required: pass
 
 Accepted for MVP1: yes, for USB-UART loopback coverage only
-Remaining blockers: Real STM32 manual tests have not been run.
+
 Residual risks: STM32 UART wiring, firmware boot output, firmware command handling, flashing/reset behavior, and MCU-specific configuration remain unverified.
 ```
 

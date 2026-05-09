@@ -27,7 +27,7 @@ export function registerCommands(
   });
 
   register(context, "mcuSerialBridge.stopBridge", async () => {
-    await bridge.stop();
+    await serialViewProvider.runWithRefreshPaused(() => bridge.stop());
     serialViewProvider.refresh();
     void vscode.window.showInformationMessage("MCU Serial Bridge stopped.");
   });

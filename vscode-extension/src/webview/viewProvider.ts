@@ -1,15 +1,28 @@
 import * as vscode from "vscode";
 import { BridgeService } from "../bridge/bridgeService";
+import { LatestDataLimits } from "../bridge/types";
 import { DEFAULT_LINE_ENDING } from "../config/defaults";
 import { asErrorMessage } from "../util/errors";
 import { renderBridgePanelHtml } from "./html";
 import { ExtensionToWebviewMessage, WebviewToExtensionMessage } from "./messages";
 
 export const SERIAL_VIEW_ID = "mcuSerialBridge.serialView";
+const WEBVIEW_REFRESH_MS = 1000;
+const WEBVIEW_LATEST_SECONDS = 3;
+const WEBVIEW_LATEST_LIMITS: LatestDataLimits = {
+  rawData: 120,
+  rawDataBytes: 64 * 1024,
+  rawLines: 120,
+  parsed: 60,
+  events: 60,
+  commands: 30
+};
 
 export class BridgeSerialViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   private view: vscode.WebviewView | undefined;
   private refreshTimer: ReturnType<typeof setInterval> | undefined;
+  private postStateInProgress = false;
+  private postStateQueued = false;
   private readonly disposables: vscode.Disposable[] = [];
 
   public constructor(private readonly bridge: BridgeService) {}
@@ -35,9 +48,7 @@ export class BridgeSerialViewProvider implements vscode.WebviewViewProvider, vsc
       })
     );
 
-    this.refreshTimer = setInterval(() => {
-      void this.postState();
-    }, 1000);
+    this.startRefreshTimer();
     void this.postState();
   }
 
@@ -49,6 +60,15 @@ export class BridgeSerialViewProvider implements vscode.WebviewViewProvider, vsc
 
   public refresh(): void {
     void this.postState();
+  }
+
+  public async runWithRefreshPaused<T>(operation: () => Promise<T>): Promise<T> {
+    this.stopRefreshTimer();
+    try {
+      return await operation();
+    } finally {
+      this.startRefreshTimer();
+    }
   }
 
   public dispose(): void {
@@ -75,9 +95,11 @@ export class BridgeSerialViewProvider implements vscode.WebviewViewProvider, vsc
         await this.postState();
         return;
       case "stopBridge":
-        await this.bridge.stop();
-        await this.postInfo("Bridge stopped.");
-        await this.postState();
+        await this.runWithRefreshPaused(async () => {
+          await this.bridge.stop();
+          await this.postInfo("Bridge stopped.");
+          await this.postState();
+        });
         return;
       case "openSerial":
         await this.bridge.openSerial({
@@ -105,8 +127,27 @@ export class BridgeSerialViewProvider implements vscode.WebviewViewProvider, vsc
   }
 
   private async postState(): Promise<void> {
-    await this.postMessage({ type: "session", session: this.bridge.getSession() });
-    await this.postMessage({ type: "latest", latest: this.bridge.getLatest() });
+    if (!this.view) {
+      return;
+    }
+    if (this.postStateInProgress) {
+      this.postStateQueued = true;
+      return;
+    }
+
+    this.postStateInProgress = true;
+    try {
+      do {
+        this.postStateQueued = false;
+        await this.postMessage({ type: "session", session: this.bridge.getSession() });
+        await this.postMessage({
+          type: "latest",
+          latest: this.bridge.getLatest(WEBVIEW_LATEST_SECONDS, WEBVIEW_LATEST_LIMITS)
+        });
+      } while (this.postStateQueued && this.view);
+    } finally {
+      this.postStateInProgress = false;
+    }
   }
 
   private async postPorts(): Promise<void> {
@@ -138,12 +179,26 @@ export class BridgeSerialViewProvider implements vscode.WebviewViewProvider, vsc
   }
 
   private disposeViewResources(): void {
-    if (this.refreshTimer) {
-      clearInterval(this.refreshTimer);
-      this.refreshTimer = undefined;
-    }
+    this.stopRefreshTimer();
     for (const disposable of this.disposables.splice(0)) {
       disposable.dispose();
     }
+  }
+
+  private startRefreshTimer(): void {
+    if (this.refreshTimer || !this.view) {
+      return;
+    }
+    this.refreshTimer = setInterval(() => {
+      void this.postState();
+    }, WEBVIEW_REFRESH_MS);
+  }
+
+  private stopRefreshTimer(): void {
+    if (!this.refreshTimer) {
+      return;
+    }
+    clearInterval(this.refreshTimer);
+    this.refreshTimer = undefined;
   }
 }

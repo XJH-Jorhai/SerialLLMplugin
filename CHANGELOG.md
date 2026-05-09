@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.5.2
+
+Fixed:
+
+- Reduced Webview refresh payloads and terminal retention to avoid UI stalls during high-rate serial streams.
+- Paused Webview refresh during bridge stop so shutdown is not delayed by large retained console output.
+- Dropped late raw serial data after stop is requested to prevent new data from extending logger shutdown.
+
+Validated:
+
+- `npm.cmd run compile`
+- `npm.cmd test`
+- Manual high-throughput serial view regression recorded in `docs/mvp1-release-checklist.md`.
+
 ## v0.1.0-mvp1
 
 MVP1 establishes the reliable serial bridge and logging baseline.

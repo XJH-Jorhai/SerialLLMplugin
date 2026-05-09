@@ -310,7 +310,7 @@ export function renderBridgePanelHtml(): string {
 
     <main class="workspace">
       <section class="terminal-pane" aria-label="Raw serial terminal">
-        <div id="terminal" class="terminal" aria-live="polite" role="log"></div>
+        <div id="terminal" class="terminal" aria-live="off" role="log"></div>
         <div class="send-row">
           <label class="sr-only" for="sendValue">Command text</label>
           <input id="sendValue" placeholder="Send command" title="Command text" aria-label="Command text">
@@ -344,7 +344,8 @@ export function renderBridgePanelHtml(): string {
       rawClearedAt: 0,
       rawEntries: [],
       rawSignatures: new Set(),
-      maxRawEntries: 2000,
+      maxRawEntries: 300,
+      maxRawChars: 128 * 1024,
       showTimestamps: false
     };
 
@@ -527,6 +528,7 @@ export function renderBridgePanelHtml(): string {
     }
 
     function ingestRaw(rawData) {
+      let changed = false;
       for (const entry of rawData) {
         const signature = rawSignature(entry);
         if (state.rawSignatures.has(signature)) {
@@ -534,8 +536,19 @@ export function renderBridgePanelHtml(): string {
         }
         state.rawSignatures.add(signature);
         state.rawEntries.push(entry);
+        changed = true;
       }
-      while (state.rawEntries.length > state.maxRawEntries) {
+      if (changed) {
+        trimRawEntries();
+      }
+    }
+
+    function trimRawEntries() {
+      while (state.rawEntries.length > state.maxRawEntries || rawEntriesCharCount() > state.maxRawChars) {
+        if (state.rawEntries.length <= 1) {
+          trimSingleRawEntry();
+          return;
+        }
         const removed = state.rawEntries.shift();
         if (removed) {
           state.rawSignatures.delete(rawSignature(removed));
@@ -543,12 +556,30 @@ export function renderBridgePanelHtml(): string {
       }
     }
 
+    function trimSingleRawEntry() {
+      const entry = state.rawEntries[0];
+      if (!entry) {
+        return;
+      }
+      const data = String(entry.data || "");
+      if (data.length <= state.maxRawChars) {
+        return;
+      }
+      entry.data = data.slice(data.length - state.maxRawChars);
+    }
+
+    function rawEntriesCharCount() {
+      return state.rawEntries.reduce((total, entry) => total + String(entry.data || "").length, 0);
+    }
+
     function rawSignature(entry) {
+      if (entry.sequence !== undefined && entry.sequence !== null) {
+        return "seq:" + entry.sequence;
+      }
       return [
         entry.ts,
         entry.bytes || 0,
-        entry.port || "",
-        entry.data || ""
+        entry.port || ""
       ].join("|");
     }
 

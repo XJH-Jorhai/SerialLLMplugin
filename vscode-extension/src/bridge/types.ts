@@ -129,6 +129,7 @@ export interface RawDataEntry {
   data: string;
   bytes: number;
   port?: string;
+  sequence?: number;
 }
 
 export interface SampleFrame {
@@ -172,4 +173,13 @@ export interface LatestData {
   samples: SampleFrame[];
   events: BridgeEvent[];
   commands: CommandEntry[];
+}
+
+export interface LatestDataLimits {
+  rawData?: number;
+  rawDataBytes?: number;
+  rawLines?: number;
+  parsed?: number;
+  events?: number;
+  commands?: number;
 }

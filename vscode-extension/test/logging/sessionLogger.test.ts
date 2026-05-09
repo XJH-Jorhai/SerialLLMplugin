@@ -102,6 +102,27 @@ describe("SessionLogger", () => {
     expect(rawLog).toBe("48,4093\r\n349,4093\r\n350,4094\r\n351,4093\r\n352,4093\r\n");
   });
 
+  it("flushes and closes after a large raw-data burst", async () => {
+    const workspace = await createTempWorkspace();
+    const logger = new SessionLogger();
+    const info = await logger.startSession(makeMetadata(workspace));
+    const chunk = "0123456789abcdef".repeat(256);
+
+    for (let index = 0; index < 256; index += 1) {
+      logger.logRawData({
+        ts: 1710000000 + index / 1000,
+        data: chunk,
+        bytes: Buffer.byteLength(chunk),
+        port: "COM7"
+      });
+    }
+
+    await logger.close();
+
+    const stat = await fsp.stat(info.files.rawLog);
+    expect(stat.size).toBe(Buffer.byteLength(chunk) * 256);
+  });
+
   it("closes idempotently", async () => {
     const workspace = await createTempWorkspace();
     const logger = new SessionLogger();

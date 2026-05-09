@@ -261,6 +261,59 @@ describe("BridgeService MVP1 integration", () => {
     ]);
   });
 
+  it("can return a limited latest snapshot without shrinking the full buffers", () => {
+    const bridge = new BridgeService({
+      configProvider: () =>
+        Promise.resolve(bridgeConfigSchema.parse({ logging: { enabled: false } })),
+      maxRecentItems: 10
+    });
+
+    for (let index = 0; index < 5; index += 1) {
+      bridge.recordRawData({
+        ts: 10 + index,
+        data: `line-${index}\n`,
+        bytes: Buffer.byteLength(`line-${index}\n`),
+        port: "COM_TEST"
+      });
+    }
+
+    const limited = bridge.getLatest(Number.MAX_SAFE_INTEGER, {
+      rawData: 2,
+      rawLines: 2,
+      parsed: 2
+    });
+    const full = bridge.getLatest(Number.MAX_SAFE_INTEGER);
+
+    expect(limited.rawData.map((entry) => entry.data)).toEqual(["line-3\n", "line-4\n"]);
+    expect(limited.rawLines.map((entry) => entry.data)).toEqual([]);
+    expect(limited.parsed.map((entry) => (entry.type === "raw" ? entry.text : ""))).toEqual([
+      "line-3",
+      "line-4"
+    ]);
+    expect(full.rawData).toHaveLength(5);
+    expect(full.parsed).toHaveLength(5);
+  });
+
+  it("drops raw serial data after stop has been requested", async () => {
+    const workspace = await createTempWorkspace();
+    const apiPort = await getFreePort();
+    const serial = createSerialHarness();
+    const bridge = createBridge(workspace, apiPort, serial, false);
+
+    try {
+      await bridge.start();
+      bridge.recordRawData({ ts: 10, data: "before\n", bytes: 7, port: "COM_TEST" });
+      await bridge.stop();
+      bridge.recordRawData({ ts: 11, data: "after\n", bytes: 6, port: "COM_TEST" });
+
+      expect(bridge.getLatest(Number.MAX_SAFE_INTEGER).rawData.map((entry) => entry.data)).toEqual([
+        "before\n"
+      ]);
+    } finally {
+      await bridge.stop();
+    }
+  });
+
   it("exposes loaded project metadata in the session response", async () => {
     const workspace = await createTempWorkspace();
     const apiPort = await getFreePort();
